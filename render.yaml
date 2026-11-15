@@ -1,0 +1,59 @@
+# Render Blueprint for ATLAS.
+#
+# Frankfurt is the closest Render region to East Africa; moving it later
+# means recreating the database, so it is set deliberately rather than
+# left at the Oregon default.
+#
+# Service plans are omitted so Render applies its defaults -- pick the size
+# in the dashboard once it is running and you can see actual usage.
+
+databases:
+  - name: atlas-db
+    databaseName: atlas
+    plan: 0.1c-256mb
+    postgresMajorVersion: '16'
+    region: frankfurt
+    diskSizeGB: 1
+
+services:
+  - type: web
+    name: atlas-api
+    runtime: docker
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /status
+    envVars:
+      - key: ATLAS_DATABASE_URL
+        fromDatabase:
+          name: atlas-db
+          property: connectionString
+      - key: ATLAS_STORAGE_BACKEND
+        value: local
+      # 60s is not enough from outside Europe/North America: a single
+      # World Bank call from Nairobi measured 35 seconds.
+      - key: ATLAS_HTTP_TIMEOUT
+        value: '300'
+
+  # World Bank publishes annually. Monthly is generous and cheap.
+  #
+  # There is deliberately NO Open-Meteo cron yet: scripts/ingest.py takes a
+  # fixed --start/--end window, so a schedule would re-fetch the same dates
+  # forever. It needs a "since last successful update" mode first.
+  - type: cron
+    name: atlas-ingest-worldbank
+    runtime: docker
+    region: frankfurt
+    schedule: '0 3 1 * *'
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python scripts/ingest.py worldbank
+    envVars:
+      - key: ATLAS_DATABASE_URL
+        fromDatabase:
+          name: atlas-db
+          property: connectionString
+      - key: ATLAS_STORAGE_BACKEND
+        value: local
+      - key: ATLAS_HTTP_TIMEOUT
+        value: '300'

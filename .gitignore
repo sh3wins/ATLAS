@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.atlas-raw/
+.env
+.venv/
+.pytest_cache/

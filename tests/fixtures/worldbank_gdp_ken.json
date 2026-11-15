@@ -1,0 +1,172 @@
+[
+ {
+  "page": 1,
+  "pages": 1,
+  "per_page": 500,
+  "total": 10,
+  "sourceid": "2",
+  "lastupdated": "2026-10-01"
+ },
+ [
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2024",
+   "value": null,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2023",
+   "value": 1753.2,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2022",
+   "value": 1654.0,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2021",
+   "value": 1560.4,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2020",
+   "value": 1472.0,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2019",
+   "value": 1388.7,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2018",
+   "value": 1310.1,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2017",
+   "value": 1236.0,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2016",
+   "value": 1166.0,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  },
+  {
+   "indicator": {
+    "id": "NY.GDP.PCAP.CD",
+    "value": "GDP per capita (current US$)"
+   },
+   "country": {
+    "id": "KE",
+    "value": "Kenya"
+   },
+   "countryiso3code": "KEN",
+   "date": "2015",
+   "value": 1100.0,
+   "unit": "",
+   "obs_status": "",
+   "decimal": 1
+  }
+ ]
+]

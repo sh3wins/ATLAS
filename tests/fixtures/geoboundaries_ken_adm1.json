@@ -1,0 +1,195 @@
+{
+ "iso3": "KEN",
+ "level": "adm1",
+ "metadata": {
+  "boundaryISO": "KEN",
+  "boundaryType": "ADM1",
+  "boundaryLicense": "CC BY 4.0",
+  "gjDownloadURL": "https://example.invalid/KEN_ADM1.geojson"
+ },
+ "geojson": {
+  "type": "FeatureCollection",
+  "features": [
+   {
+    "type": "Feature",
+    "properties": {
+     "shapeName": "Nairobi",
+     "shapeID": "KEN-ADM1-001",
+     "shapeGroup": "KEN",
+     "shapeType": "ADM1"
+    },
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        36.65,
+        -1.44
+       ],
+       [
+        37.05,
+        -1.44
+       ],
+       [
+        37.05,
+        -1.16
+       ],
+       [
+        36.65,
+        -1.16
+       ],
+       [
+        36.65,
+        -1.44
+       ]
+      ]
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "shapeName": "Mombasa",
+     "shapeID": "KEN-ADM1-002",
+     "shapeGroup": "KEN",
+     "shapeType": "ADM1"
+    },
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        39.55,
+        -4.1
+       ],
+       [
+        39.75,
+        -4.1
+       ],
+       [
+        39.75,
+        -3.95
+       ],
+       [
+        39.55,
+        -3.95
+       ],
+       [
+        39.55,
+        -4.1
+       ]
+      ]
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "shapeName": "Kisumu",
+     "shapeID": "KEN-ADM1-003",
+     "shapeGroup": "KEN",
+     "shapeType": "ADM1"
+    },
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        34.45,
+        -0.35
+       ],
+       [
+        35.05,
+        -0.35
+       ],
+       [
+        35.05,
+        0.1
+       ],
+       [
+        34.45,
+        0.1
+       ],
+       [
+        34.45,
+        -0.35
+       ]
+      ]
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "shapeName": "Nakuru",
+     "shapeID": "KEN-ADM1-004",
+     "shapeGroup": "KEN",
+     "shapeType": "ADM1"
+    },
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        35.5,
+        -1.2
+       ],
+       [
+        36.5,
+        -1.2
+       ],
+       [
+        36.5,
+        0.3
+       ],
+       [
+        35.5,
+        0.3
+       ],
+       [
+        35.5,
+        -1.2
+       ]
+      ]
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "properties": {
+     "shapeName": "Turkana",
+     "shapeID": "KEN-ADM1-005",
+     "shapeGroup": "KEN",
+     "shapeType": "ADM1"
+    },
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        34.3,
+        1.5
+       ],
+       [
+        36.0,
+        1.5
+       ],
+       [
+        36.0,
+        5.0
+       ],
+       [
+        34.3,
+        5.0
+       ],
+       [
+        34.3,
+        1.5
+       ]
+      ]
+     ]
+    }
+   }
+  ]
+ }
+}

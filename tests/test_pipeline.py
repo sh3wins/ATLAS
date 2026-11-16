@@ -199,43 +199,188 @@ def test_coverage_reports_the_gaps(conn, loaded):
 
 
 # --- freshness ----------------------------------------------------------
+#
+# The two axes must stay independent: "ATLAS could not fetch" is ours,
+# "the source has not published" is not. An earlier version of these
+# tests asserted independence while actually varying last_successful on
+# both sides -- it passed, and the implementation was conflating them.
 
-def test_failure_and_staleness_are_different_states(conn, loaded):
-    from datetime import datetime, timedelta, timezone
+from datetime import timedelta  # noqa: E402
+
+
+def _t(**kw):
+    """classify() with healthy defaults, overridden per test."""
+    from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
+    args = dict(
+        expected_frequency="daily",
+        last_successful=now,                      # we fetched just now
+        consecutive_failures=0,                   # nothing is erroring
+        last_source_publication=now.date(),       # source is up to date
+        expected_lag=timedelta(0),
+        now=now,
+    )
+    args.update(kw)
+    return freshness.classify(**args)
 
-    # Our pipeline is broken -- should page someone.
-    assert freshness.classify(expected_frequency="daily", last_successful=now,
-                              consecutive_failures=3) == "failing"
-    # We fetched fine; the source simply hasn't published. Not our fault.
-    assert freshness.classify(expected_frequency="daily",
-                              last_successful=now - timedelta(days=30),
-                              consecutive_failures=0) == "stale"
-    assert freshness.classify(expected_frequency="daily", last_successful=now,
-                              consecutive_failures=0) == "current"
+
+def test_healthy_pipeline_and_fresh_source_is_current(conn, loaded):
+    assert _t() == "current"
 
 
-def test_staleness_rule_is_per_source(conn, loaded):
-    """ERA5 runs months behind by design; a global 30-day rule would flag
-    correct data and train users to ignore the warning."""
-    from datetime import datetime, timedelta, timezone
-    sixty_days_ago = datetime.now(timezone.utc) - timedelta(days=60)
+def test_dormant_source_is_stale_while_the_pipeline_is_perfect(conn, loaded):
+    """The case the old test claimed to cover and did not.
 
-    assert freshness.classify(expected_frequency="daily",
-                              last_successful=sixty_days_ago,
-                              consecutive_failures=0) == "stale"
-    assert freshness.classify(expected_frequency="annual",
-                              last_successful=sixty_days_ago,
-                              consecutive_failures=0) == "current"
+    ATLAS fetched seconds ago and has never errored. Only the source's
+    newest published period is old. That must not read `current`, and
+    must not read `failing` either -- it is not our fault.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    status = _t(last_source_publication=(now - timedelta(days=400)).date())
+    assert status == "stale"
+
+
+def test_broken_pipeline_is_failing_even_when_the_source_is_fresh(conn, loaded):
+    """Mirror image: the source published today, we cannot fetch."""
+    assert _t(consecutive_failures=3) == "failing"
+
+
+def test_a_scheduler_that_silently_stopped_reads_failing(conn, loaded):
+    """No errors are raised when nothing runs at all, so
+    consecutive_failures stays 0. Age of the last success catches it."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    assert _t(last_successful=now - timedelta(days=30)) == "failing"
+
+
+def test_expected_lag_keeps_a_reanalysis_source_current(conn, loaded):
+    """ERA5's newest period is always months old by design. Without
+    expected_lag that reads stale, and users learn to ignore the field."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    old_period = (now - timedelta(days=60)).date()
+
+    assert _t(last_source_publication=old_period,
+              expected_lag=timedelta(0)) == "stale"
+    assert _t(last_source_publication=old_period,
+              expected_lag=timedelta(days=90)) == "current"
+
+
+def test_never_fetched_is_unknown_not_current(conn, loaded):
+    assert _t(last_successful=None) == "unknown"
+
+
+def test_unknown_source_publication_is_not_reported_as_current(conn, loaded):
+    assert _t(last_source_publication=None) == "unknown"
 
 
 def test_recording_a_failure_updates_status(conn, loaded):
-    freshness.record_attempt(conn, "worldbank", succeeded=False, error="timeout")
-    freshness.record_attempt(conn, "worldbank", succeeded=False, error="timeout")
-    freshness.record_attempt(conn, "worldbank", succeeded=False, error="timeout")
+    for _ in range(3):
+        freshness.record_attempt(conn, "worldbank", succeeded=False,
+                                 error="timeout")
     row = db.query_one(
         conn, "SELECT freshness_status, consecutive_failures, last_error "
               "FROM dataset_freshness WHERE source_id = 'worldbank'")
     assert row["freshness_status"] == "failing"
     assert row["consecutive_failures"] == 3
     assert row["last_error"] == "timeout"
+
+
+def test_source_publication_is_derived_from_what_was_ingested(conn, loaded):
+    """Taken from the fact table, not trusted from a response header, so
+    it cannot claim data ATLAS does not actually hold."""
+    newest = freshness.observed_publication(conn, "worldbank")
+    held = db.query_one(
+        conn, "SELECT MAX(period_end) AS m FROM observation "
+              "WHERE source_id='worldbank' AND value IS NOT NULL")["m"]
+    assert newest == held
+
+
+# --- failure handling ----------------------------------------------------
+
+def test_one_bad_artifact_does_not_discard_the_good_ones(conn, storage, loaded):
+    """A per-artifact failure used to roll back the whole transaction,
+    silently dropping artifacts already written while still counting them
+    as successful in the report."""
+    from atlas.storage import content_hash
+
+    before = db.query_one(
+        conn, "SELECT count(*) AS n FROM observation "
+              "WHERE source_id='open-meteo'")["n"]
+
+    # One valid artifact, one whose place/location counts disagree -- the
+    # Open-Meteo parser refuses to guess the alignment and raises.
+    good = {"places": [loaded["counties"][0]], "variable": "precipitation_sum",
+            "locations": [{"daily": {"time": ["2024-06-01"],
+                                     "precipitation_sum": [4.2]}}]}
+    bad = {"places": [1, 2, 3], "variable": "precipitation_sum",
+           "locations": [{"daily": {"time": ["2024-06-01"],
+                                    "precipitation_sum": [1.0]}}]}
+
+    for payload in (good, bad):
+        key, body = storage.put_json("open-meteo", payload)
+        db.record_raw_object(conn, key, "open-meteo", {"url": "x"},
+                             "2026-11-16T00:00:00Z", content_hash(body),
+                             200, "application/json", len(body))
+
+    report = standardise.standardise_pending(conn, storage, "open-meteo")
+
+    assert report.artifacts_failed == 1
+    assert report.artifacts_read == 1
+    # The good artifact's row survived the bad one's rollback.
+    after = db.query_one(
+        conn, "SELECT count(*) AS n FROM observation "
+              "WHERE source_id='open-meteo'")["n"]
+    assert after == before + 1
+    assert report.rows_written == 1
+
+
+def test_report_counts_match_what_was_committed(conn, storage, loaded):
+    """The number the run prints must equal the number in the database."""
+    from atlas.storage import content_hash
+
+    payload = {"places": [loaded["counties"][0]],
+               "variable": "precipitation_sum",
+               "locations": [{"daily": {"time": ["2024-07-01", "2024-07-02"],
+                                        "precipitation_sum": [1.5, 2.5]}}]}
+    key, body = storage.put_json("open-meteo", payload)
+    db.record_raw_object(conn, key, "open-meteo", {"url": "x"},
+                         "2026-11-16T00:00:00Z", content_hash(body),
+                         200, "application/json", len(body))
+
+    before = db.query_one(conn, "SELECT count(*) AS n FROM observation")["n"]
+    report = standardise.standardise_pending(conn, storage, "open-meteo")
+    after = db.query_one(conn, "SELECT count(*) AS n FROM observation")["n"]
+
+    assert report.rows_written == after - before == 2
+
+
+# --- acquisition resumability -------------------------------------------
+
+def test_a_failed_chunk_marks_the_result_partial_not_complete():
+    """The resumability design had no test coverage at all."""
+    from atlas.acquisition import AcquisitionResult, AcquisitionStatus, Artifact
+
+    result = AcquisitionResult(source_id="open-meteo")
+    assert result.status is AcquisitionStatus.COMPLETE and result.ok
+
+    result.add(Artifact(key="k1", content_hash="h", byte_size=1))
+    result.fail_chunk({"batch": 2}, "read timed out")
+
+    assert result.status is AcquisitionStatus.PARTIAL
+    assert not result.ok
+    assert len(result.artifacts) == 1          # the good batch is kept
+    assert result.failed_chunks[0]["batch"] == 2
+    assert "timed out" in result.failed_chunks[0]["error"]
+
+
+def test_a_run_where_everything_failed_is_failed_not_partial():
+    from atlas.acquisition import AcquisitionResult, AcquisitionStatus
+
+    result = AcquisitionResult(source_id="worldbank")
+    result.fail_chunk({"page": 1}, "read timed out")
+
+    assert result.status is AcquisitionStatus.FAILED
+    assert not result.ok
+    assert result.artifacts == []

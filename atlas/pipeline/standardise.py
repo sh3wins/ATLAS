@@ -64,24 +64,30 @@ def standardise_pending(conn: psycopg.Connection, storage: Storage,
     for raw in db.unparsed_objects(conn, source_id):
         key = raw["s3_key"]
         try:
-            payload = storage.get_json(key)
-            artifact = Artifact(
-                key=key,
-                content_hash="",          # already recorded at acquisition
-                byte_size=0,
-                request=raw["request"] or {},
-                fetched_at=raw["fetched_at"],
-            )
-            rows = connector.parse(payload, artifact, resolver)
-            written = db.upsert_observations(conn, [r.as_params() for r in rows])
-            db.mark_parsed(conn, key)
+            # A SAVEPOINT, not the whole transaction. A bare rollback here
+            # would discard every artifact already parsed in this run while
+            # the report still counted them as written -- the run would
+            # claim success having committed nothing.
+            with conn.transaction():
+                payload = storage.get_json(key)
+                artifact = Artifact(
+                    key=key,
+                    content_hash="",      # already recorded at acquisition
+                    byte_size=0,
+                    request=raw["request"] or {},
+                    fetched_at=raw["fetched_at"],
+                )
+                rows = connector.parse(payload, artifact, resolver)
+                written = db.upsert_observations(
+                    conn, [r.as_params() for r in rows])
+                db.mark_parsed(conn, key)
 
             report.artifacts_read += 1
             report.rows_written += written
         except Exception as exc:  # noqa: BLE001
-            # The artifact stays unparsed, so a fix plus a re-run picks it
-            # up. Nothing is lost and nothing half-written is committed.
-            conn.rollback()
+            # Only this artifact is rolled back; it stays unparsed, so a
+            # fix plus a re-run picks it up. Earlier artifacts in this run
+            # keep their writes.
             report.artifacts_failed += 1
             report.errors.append(f"{key}: {exc}")
 

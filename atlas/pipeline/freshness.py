@@ -5,17 +5,23 @@ delivery. It does not cover whether an upstream provider changes its
 schema, restates a figure, or publishes something wrong. A promise
 nobody can verify is a slogan, so this is what makes it checkable.
 
-Two failure modes, kept apart on purpose:
+Two genuinely independent axes, which earlier versions of this module
+conflated:
 
-  failing  ATLAS could not fetch. Our problem. Should page someone.
-  stale    the source has not published. Not our problem, and conflating
-           the two either blames us for their schedule or hides a broken
-           pipeline behind their slowness.
+  Is ATLAS fetching?        consecutive_failures, last_successful_update
+                            -> `failing`. Ours. Should page someone.
 
-The staleness rule is per source. ERA5 reanalysis runs months behind
-real time by design and World Bank indicators arrive annually; a global
-"stale after 30 days" would flag correct data and train users to ignore
-the warning.
+  Has the source published? last_source_publication
+                            -> `due` / `stale`. Not ours. Should not page.
+
+The distinction only holds because `stale` is computed from the newest
+period the SOURCE has published, never from when ATLAS last ran. A
+pipeline that fetches perfectly from a dormant source must read `stale`,
+not `current`.
+
+Thresholds are per source. ERA5 reanalysis runs months behind real time
+by design and World Bank indicators arrive annually; one global rule
+would flag correct data and train users to ignore the warning.
 """
 from __future__ import annotations
 
@@ -25,16 +31,7 @@ import psycopg
 
 from .. import db
 
-# How much past the expected cadence counts as late rather than due.
-GRACE = {
-    "daily": timedelta(days=3),
-    "weekly": timedelta(days=10),
-    "monthly": timedelta(days=45),
-    "quarterly": timedelta(days=120),
-    "annual": timedelta(days=450),
-    "irregular": timedelta(days=3650),
-}
-
+# How often the source is expected to publish.
 CADENCE = {
     "daily": timedelta(days=1),
     "weekly": timedelta(days=7),
@@ -43,6 +40,77 @@ CADENCE = {
     "annual": timedelta(days=366),
     "irregular": timedelta(days=3650),
 }
+
+# How far past the expected point counts as `due` rather than `stale`.
+# Additional to the cadence, not an absolute age.
+TOLERANCE = {
+    "daily": timedelta(days=3),
+    "weekly": timedelta(days=7),
+    "monthly": timedelta(days=21),
+    "quarterly": timedelta(days=60),
+    "annual": timedelta(days=120),
+    "irregular": timedelta(days=3650),
+}
+
+
+def _as_utc(value) -> datetime | None:
+    """Postgres hands back a date for last_source_publication and a
+    timestamptz for the update columns. Normalise both."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    raise TypeError(f"cannot interpret {value!r} as a time")
+
+
+def classify(*, expected_frequency: str | None, last_successful,
+             consecutive_failures: int, last_source_publication=None,
+             expected_lag: timedelta | None = None,
+             now: datetime | None = None) -> str:
+    """Return one of: failing, stale, due, current, unknown.
+
+    `last_source_publication` is the newest PERIOD the source has
+    published (a date), not when it published it. `expected_lag` is how
+    far behind real time that source normally runs -- ERA5 is months
+    behind by design, so its newest period is always old and that is
+    correct, not stale.
+    """
+    now = now or datetime.now(timezone.utc)
+    frequency = expected_frequency or "irregular"
+    cadence = CADENCE.get(frequency, CADENCE["irregular"])
+    tolerance = TOLERANCE.get(frequency, TOLERANCE["irregular"])
+    lag = expected_lag or timedelta(0)
+
+    # --- axis 1: is ATLAS fetching? -------------------------------------
+    # Ours to fix, so it outranks anything about the source.
+    if consecutive_failures >= 3:
+        return "failing"
+
+    last_successful = _as_utc(last_successful)
+    if last_successful is None:
+        return "unknown"
+
+    # A scheduler that silently stopped produces no errors at all, so
+    # consecutive_failures stays 0 while nothing runs. Age of the last
+    # SUCCESS catches that.
+    if now - last_successful > cadence + tolerance:
+        return "failing"
+
+    # --- axis 2: has the source published? ------------------------------
+    # Not ours to fix. Never reported as `failing`.
+    published = _as_utc(last_source_publication)
+    if published is None:
+        return "unknown"
+
+    source_age = now - published
+    expected = cadence + lag
+    if source_age <= expected:
+        return "current"
+    if source_age <= expected + tolerance:
+        return "due"
+    return "stale"
 
 
 def record_attempt(conn: psycopg.Connection, source_id: str, *, succeeded: bool,
@@ -80,26 +148,19 @@ def record_attempt(conn: psycopg.Connection, source_id: str, *, succeeded: bool,
     recompute(conn, source_id)
 
 
-def classify(*, expected_frequency: str | None, last_successful,
-             consecutive_failures: int, now: datetime | None = None) -> str:
-    now = now or datetime.now(timezone.utc)
+def observed_publication(conn: psycopg.Connection, source_id: str) -> date | None:
+    """The newest period ATLAS actually holds for a source.
 
-    # A broken pipeline is our failure and outranks everything else.
-    if consecutive_failures >= 3:
-        return "failing"
-    if last_successful is None:
-        return "unknown"
-
-    frequency = expected_frequency or "irregular"
-    cadence = CADENCE.get(frequency, CADENCE["irregular"])
-    grace = GRACE.get(frequency, GRACE["irregular"])
-
-    age = now - last_successful
-    if age <= cadence:
-        return "current"
-    if age <= grace:
-        return "due"
-    return "stale"
+    Derived from the fact table rather than trusted from a header, so it
+    cannot drift from what was really ingested.
+    """
+    row = db.query_one(
+        conn,
+        "SELECT MAX(period_end) AS newest FROM observation "
+        "WHERE source_id = %s AND value IS NOT NULL",
+        (source_id,),
+    )
+    return row["newest"] if row else None
 
 
 def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
@@ -109,22 +170,30 @@ def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
         conn,
         f"""
         SELECT f.source_id, f.last_successful_update, f.consecutive_failures,
-               s.expected_frequency
+               f.last_source_publication, s.expected_frequency, s.expected_lag
         FROM dataset_freshness f JOIN source s USING (source_id) {where}
         """,
         params,
     )
     for row in rows:
+        # Prefer what we actually hold over what was last recorded.
+        published = observed_publication(conn, row["source_id"]) \
+            or row["last_source_publication"]
         status = classify(
             expected_frequency=row["expected_frequency"],
             last_successful=row["last_successful_update"],
             consecutive_failures=row["consecutive_failures"],
+            last_source_publication=published,
+            expected_lag=row["expected_lag"],
         )
         db.execute(
             conn,
-            "UPDATE dataset_freshness SET freshness_status = %s, updated_at = now() "
+            "UPDATE dataset_freshness "
+            "SET freshness_status = %s, "
+            "    last_source_publication = COALESCE(%s, last_source_publication), "
+            "    updated_at = now() "
             "WHERE source_id = %s",
-            (status, row["source_id"]),
+            (status, published, row["source_id"]),
         )
 
 

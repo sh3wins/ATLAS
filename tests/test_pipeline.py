@@ -463,3 +463,59 @@ def test_status_says_which_basis_each_source_is_on(conn, loaded):
     freshness.record_attempt(conn, "open-meteo", succeeded=True)
     report = {r["source_id"]: r for r in freshness.status_report(conn)}
     assert report["open-meteo"]["publication_basis"] in {"observed", "none"}
+
+
+def test_a_refetch_that_changes_nothing_writes_nothing(conn, loaded):
+    """Every fetch lands a new raw file, so raw_ref differs on every run.
+    Counting that as a change made the "rows written" number equal the
+    row count on every real ingest -- the exact thing the DISTINCT FROM
+    clause was added to stop."""
+    # raw_ref is a foreign key into raw_object, so a later fetch has to be
+    # a real landed file rather than an invented key.
+    later, newer = ("source=worldbank/year=2026/month=12/x.json",
+                    "source=worldbank/year=2026/month=12/y.json")
+    for key in (later, newer):
+        db.record_raw_object(conn, key, "worldbank", {"url": "x"},
+                             "2026-12-01T00:00:00Z", key[-6:], 200,
+                             "application/json", 10)
+
+    rows = db.query(
+        conn,
+        "SELECT place_id, indicator_id, period_start, period_end, grain, "
+        "       value, missing_reason, source_id, raw_ref, quality "
+        "FROM observation WHERE source_id = 'worldbank' LIMIT 20")
+    assert rows, "fixture should have landed World Bank rows"
+
+    same = db.upsert_observations(conn, [dict(r) for r in rows])
+    assert same == 0, "identical rows must not count as written"
+
+    # A later fetch of identical values, landed in a different raw file.
+    repointed = [{**r, "raw_ref": later} for r in rows]
+    assert db.upsert_observations(conn, repointed) == 0, \
+        "a new raw file is not a changed observation"
+
+    kept = db.query_one(
+        conn, "SELECT raw_ref FROM observation WHERE place_id = %s AND "
+              "indicator_id = %s AND period_start = %s AND grain = %s AND "
+              "source_id = %s",
+        (rows[0]["place_id"], rows[0]["indicator_id"], rows[0]["period_start"],
+         rows[0]["grain"], rows[0]["source_id"]))
+    assert kept["raw_ref"] == rows[0]["raw_ref"], \
+        "an unchanged row keeps the provenance that established it"
+
+    # A real change still lands, and repoints provenance with it. Pick a
+    # row that holds a value: setting one on a recorded gap would violate
+    # the value-xor-missing_reason constraint, which is correct of it.
+    present = next(r for r in rows if r["value"] is not None)
+    changed = [{**present, "value": present["value"] + 1,
+                "raw_ref": newer}]
+    assert db.upsert_observations(conn, changed) == 1
+
+    moved = db.query_one(
+        conn, "SELECT value, raw_ref FROM observation WHERE place_id = %s AND "
+              "indicator_id = %s AND period_start = %s AND grain = %s AND "
+              "source_id = %s",
+        (present["place_id"], present["indicator_id"], present["period_start"],
+         present["grain"], present["source_id"]))
+    assert moved["raw_ref"].endswith("y.json"), \
+        "a changed value repoints provenance at the fetch that changed it"

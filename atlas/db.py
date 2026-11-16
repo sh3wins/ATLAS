@@ -144,13 +144,21 @@ DO UPDATE SET value          = EXCLUDED.value,
               quality        = EXCLUDED.quality,
               ingested_at    = now()
 -- Skip rows whose content is unchanged, so rowcount is "rows that
--- actually changed" rather than "rows sent". Re-parsing is meant to be
+-- actually changed" rather than "rows sent". Re-ingesting is meant to be
 -- free and frequent; a run that reports 4,732 observations written when
 -- it changed nothing trains you to ignore the number.
+--
+-- raw_ref is deliberately NOT part of this test, though it is updated
+-- when something else changes. Every fetch lands a new raw file, so a
+-- new key arrives on every run: including it here made the condition
+-- always true and the count always the full row count, which is the bug
+-- this clause was added to fix. Leaving an unchanged row alone also
+-- keeps the better provenance -- raw_ref then points at the fetch that
+-- established the value, not at the most recent fetch that happened to
+-- agree with it.
 WHERE observation.value          IS DISTINCT FROM EXCLUDED.value
    OR observation.missing_reason IS DISTINCT FROM EXCLUDED.missing_reason
    OR observation.period_end     IS DISTINCT FROM EXCLUDED.period_end
-   OR observation.raw_ref        IS DISTINCT FROM EXCLUDED.raw_ref
    OR observation.quality        IS DISTINCT FROM EXCLUDED.quality
 """
 

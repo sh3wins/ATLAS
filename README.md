@@ -35,13 +35,32 @@ observations from Open-Meteo, aggregated and served over the API.
 | Front end | Not started |
 | Deployment | Not started |
 
-36 tests pass, and all three connectors have now run against the real
-APIs.
+62 tests pass against a real PostgreSQL 16 + PostGIS from an empty
+schema, with every migration applied on each run. All three connectors
+have run against the real APIs.
+
+Most fixtures were written from the API documentation, so most parser
+tests check that the parsers match our reading of the docs rather than
+the APIs. `tests/fixtures/live/` holds seven responses recorded from the
+real endpoints by `scripts/record_fixtures.py`, with the URL, timestamp
+and a SHA-256 of the bytes as they arrived. Recording those immediately
+found two defects no hand-written fixture had reached: the World Bank
+answers **HTTP 200 with an error object** for an unknown country or
+indicator, which the parser had been treating as an empty result, and
+Open-Meteo's rejection body carries a `reason` that was being thrown
+away. More live cases are worth recording.
 
 Three bugs found on first real use and fixed: a missing `sys.path` shim in
 two scripts (tests couldn't see it, since pytest sets the path itself),
 `demo.py` writing fixtures into a production database, and the year rollup
 labelling a partial period as a full year.
+
+Two review rounds since: an external code review found eleven defects in
+these files, all fixed, and running the suite afterwards found two more in
+those fixes. A documentation review added a backlog of verification work.
+The largest open items are provenance on aggregated rows, single-point
+weather sampling, and the unverified S3 backend. The tracked list is
+longer than this README; see `AUDIT-2026-11-16.md`.
 
 ---
 
@@ -99,8 +118,11 @@ a shape, and it is most of the flexibility the design has.
 `parse()` works from a landed artifact and never knows which of those
 happened.
 
-Acquisition is resumable: each chunk retries independently, so a timeout
-during a multi-year backfill costs one chunk, not the run.
+Chunks fail independently: a timeout during a multi-year backfill costs
+one chunk rather than the run, and the failed chunk is recorded with
+enough detail to reissue it. Nothing retries it yet — `failed_chunks`
+has no consumer, so "resumable" describes the shape of the design, not a
+working behaviour.
 
 ### The rules live in data, not code
 
@@ -137,16 +159,38 @@ failures that are usually conflated:
 - `failing` — ATLAS could not fetch. Our problem.
 - `stale` — the source has not published. Not our problem.
 
-Staleness thresholds are per source, because ERA5 runs months behind by
-design while World Bank indicators arrive annually. A global rule would
-flag correct data and train users to ignore the warning.
+`failing` is measured against ATLAS's own schedule
+(`source.run_interval`), so a scheduler that dies silently is caught
+within one interval plus a short grace. Measuring it against the
+source's publication cadence, as an earlier version did, let an annual
+source sit quiet for 486 days before anyone was told.
+
+Staleness thresholds are per source, because the Open-Meteo archive runs
+about five days behind real time by design while World Bank indicators
+arrive annually. A global rule would flag correct data and train users
+to ignore the warning.
+
+Where the publication signal comes from is recorded alongside it, in
+`dataset_freshness.publication_basis`, because the two sources answer
+very differently:
+
+- `declared` — the source stated its own date. The World Bank's response
+  carries `lastupdated`, which is read at parse time and is the only
+  statement about its publishing that does not come from reading our own
+  database back.
+- `observed` — inferred from the newest period ATLAS holds. Still useful,
+  and never written into the source's own column, because it cannot
+  outrun what ATLAS asked for: a backfill bounded at 2024-12-31 would
+  otherwise report a healthy source as dormant for ever. Open-Meteo's
+  archive declares nothing, so it sits here.
+- `none` — unknown, and said so.
 
 ---
 
 ## Layout
 
 ```
-migrations/      001-005, run in order
+migrations/      001-008, run in order
 atlas/
   config.py      environment settings
   db.py          psycopg access, explicit SQL
@@ -156,22 +200,29 @@ atlas/
   pipeline/      places, standardise, aggregate, freshness
   api/main.py    FastAPI
 scripts/         load_places, ingest, demo
-tests/           36 tests, fixtures matching real response shapes
+tests/           62 tests; fixtures/ written from documented shapes,
+                 fixtures/live/ recorded from the real APIs
 ```
 
 ---
 
 ## Before going live
 
-1. **Open-Meteo licensing.** The data is CC BY 4.0 and redistributable
-   commercially. The free hosted API is non-commercial only. With paid
-   tiers planned, you need a commercial plan, a self-hosted instance, or
-   to pull ERA5 directly from Copernicus. `ATLAS_OPEN_METEO_BASE` makes
-   that an environment change.
+1. **Open-Meteo licensing.** Weather data is ERA5 and ERA5-Land
+   reanalysis, delivered through Open-Meteo's archive endpoint. The
+   dataset and the delivery channel are separate things, and so are
+   their terms: the data is CC BY 4.0 and redistributable commercially,
+   while the free hosted API is non-commercial only. There is no direct
+   Copernicus CDS connector. With paid tiers planned the options are a
+   commercial Open-Meteo plan, a self-hosted instance, or a CDS
+   connector that does not exist yet. `ATLAS_OPEN_METEO_BASE` makes the
+   first two an environment change.
 2. **geoBoundaries release.** The code uses `gbOpen`. Do not switch to
    `gbHumanitarian` — it is documented as not for commercial use.
-3. **Verify the live response shapes** on first run. Parsers were written
-   against documented shapes and recorded fixtures, not live calls.
+3. **Keep recording live response shapes.** `scripts/record_fixtures.py`
+   captures the happy path, both timezones, an unknown country, an
+   unknown indicator and an impossible date window. Rate limiting,
+   partial responses and a mid-series schema change are not covered.
 4. **Third source.** Pick one that arrives differently — a bulk file or a
    published table — so it stresses the acquisition boundary rather than
    confirming it.
@@ -191,6 +242,16 @@ tests/           36 tests, fixtures matching real response shapes
   2025, so no null years appeared in the live response. The
   `missing_reason = not_collected` path works against the fixture and has
   not met real upstream nulls.
+- **Aggregated rows carry no provenance.** A monthly or yearly row has no
+  `raw_ref` and no count of the days behind it, so a month assembled from
+  nine days of data is indistinguishable from a complete one.
+- **`content_hash` hashes a re-serialisation,** not the bytes as they
+  arrived, so it cannot be used to detect that an upstream file was
+  quietly revised.
+- **A geoBoundaries re-release would duplicate every county.** `shapeID`
+  is release-scoped and `place` has no unique key across releases.
+- **S3 is written but unverified** against a real bucket, as the status
+  table says. Do not describe it as production storage.
 
 ## Configuration
 

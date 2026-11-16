@@ -11,10 +11,12 @@ doesn't:
    place, crosswalked like any other. Never the ATLAS place_id, which is
    assigned by the database and renumbers on a rebuild: see coord_code.
 
-2. A local calendar. Daily values are requested with
-   timezone=Africa/Nairobi, so a "day" means a Kenyan day. Converting
-   those boundaries to UTC would shift them three hours and silently move
-   observations between days.
+2. A local calendar. Daily values are requested in a named zone, so a
+   "day" means a local day. The zone comes from the point's country
+   (country_config.timezone), because East Africa is not one zone:
+   Kenya, Uganda and Tanzania are UTC+3, Rwanda and Burundi UTC+2.
+   Converting those boundaries to UTC, or applying one country's zone to
+   another, moves observations between days without any error.
 
 Values are labelled `modelled`: ERA5 is a reanalysis that assimilates
 observations, not a rain gauge reading. Good data, widely used, and not a
@@ -62,55 +64,92 @@ class OpenMeteoConnector(Connector):
     )
 
     def fetch(self, points: list[dict], start_date: str, end_date: str,
-              variable: str = "precipitation_sum", timezone: str = "Africa/Nairobi",
+              variable: str = "precipitation_sum", timezone: str | None = None,
               **_: Any) -> AcquisitionResult:
         """Fetch daily values for a set of points.
 
-        `points` is [{"place_id": int, "lat": float, "lon": float}, ...].
-        Batched; each batch is an independently retryable chunk, so a
-        timeout costs one batch rather than the whole backfill.
+        `points` is [{"place_id": int, "country_iso3": str, "lat": float,
+        "lon": float, "timezone": str}, ...].
+
+        The zone comes from each point's own country, not from this
+        connector. A daily total is cut at local midnight, so asking for
+        Kigali in Africa/Nairobi does not fail: it returns a complete,
+        plausible series in which every day is bounded an hour early and
+        every total is misdated. Points are therefore grouped by zone
+        before batching, and a point with no zone stops the run.
+
+        Each batch is an independently retryable chunk, so a timeout
+        costs one batch rather than the whole backfill.
         """
         result = AcquisitionResult(source_id=self.spec.source_id)
 
-        for batch in _chunks(points, MAX_COORDS_PER_REQUEST):
-            params = {
-                "latitude": ",".join(str(p["lat"]) for p in batch),
-                "longitude": ",".join(str(p["lon"]) for p in batch),
-                "start_date": start_date,
-                "end_date": end_date,
-                "daily": variable,
-                "timezone": timezone,
-            }
-            if settings.open_meteo_api_key:
-                params["apikey"] = settings.open_meteo_api_key
+        by_zone: dict[str, list[dict]] = {}
+        for point in points:
+            zone = point.get("timezone") or timezone
+            if not zone:
+                raise ValueError(
+                    f"{self.spec.source_id}: no timezone for place "
+                    f"{point.get('place_id')} in "
+                    f"{point.get('country_iso3') or 'an unknown country'}. "
+                    "Defaulting would misdate every value rather than lose "
+                    "it, so this is refused."
+                )
+            by_zone.setdefault(zone, []).append(point)
 
-            # Coordinates ride along as the source's own codes. Resolving
-            # them to places happens at parse time, through the crosswalk.
-            codes = [coord_code(p["lat"], p["lon"]) for p in batch]
-            chunk = {
-                "url": settings.open_meteo_base,
-                "params": {k: v for k, v in params.items() if k != "apikey"},
-                "codes": codes,
-                "variable": variable,
-                "timezone": timezone,
-            }
+        for zone, zone_points in sorted(by_zone.items()):
+            for batch in _chunks(zone_points, MAX_COORDS_PER_REQUEST):
+                params = {
+                    "latitude": ",".join(str(p["lat"]) for p in batch),
+                    "longitude": ",".join(str(p["lon"]) for p in batch),
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "daily": variable,
+                    "timezone": zone,
+                }
+                if settings.open_meteo_api_key:
+                    params["apikey"] = settings.open_meteo_api_key
 
-            try:
-                response = self.client.get(settings.open_meteo_base, params=params)
-                response.raise_for_status()
-                payload = response.json()
-            except Exception as exc:  # noqa: BLE001
-                result.fail_chunk(chunk, str(exc))
-                continue
+                # Coordinates ride along as the source's own codes.
+                # Resolving them to places happens at parse time, through
+                # the crosswalk.
+                codes = [coord_code(p["lat"], p["lon"]) for p in batch]
+                chunk = {
+                    "url": settings.open_meteo_base,
+                    "params": {k: v for k, v in params.items() if k != "apikey"},
+                    "codes": codes,
+                    "variable": variable,
+                    "timezone": zone,
+                }
 
-            # A single coordinate returns an object; several return a
-            # list. Normalising here means parse() only ever sees a list.
-            if isinstance(payload, dict):
-                payload = [payload]
+                try:
+                    response = self.client.get(settings.open_meteo_base,
+                                               params=params)
+                    response.raise_for_status()
+                    payload = response.json()
+                except Exception as exc:  # noqa: BLE001
+                    # A rejected request answers with {"error": true,
+                    # "reason": "..."}. "Invalid date" is worth keeping;
+                    # "400 Bad Request" sends someone reading logs.
+                    detail = str(exc)
+                    failed = getattr(exc, "response", None)
+                    if failed is not None:
+                        try:
+                            body = failed.json()
+                        except Exception:  # noqa: BLE001
+                            body = None
+                        if isinstance(body, dict) and body.get("reason"):
+                            detail = f"{detail}: {body['reason']}"
+                    result.fail_chunk(chunk, detail)
+                    continue
 
-            self._land(result, {"codes": codes, "variable": variable,
-                                "timezone": timezone, "locations": payload},
-                       chunk, response.status_code)
+                # A single coordinate returns an object; several return a
+                # list. Normalising here means parse() only sees a list.
+                if isinstance(payload, dict):
+                    payload = [payload]
+
+                self._land(result, {"codes": codes, "variable": variable,
+                                    "timezone": zone, "locations": payload},
+                           chunk, response.status_code)
 
         return result
 
@@ -118,6 +157,10 @@ class OpenMeteoConnector(Connector):
               resolver: Resolver) -> list[ObservationRow]:
         rows: list[ObservationRow] = []
         self.unresolved: list[str] = []
+        # The archive response carries no publication date, so there is
+        # nothing to declare. Freshness falls back to what ATLAS holds and
+        # labels it `observed` rather than passing it off as the source's.
+        self.source_publication = None
         if not isinstance(payload, dict):
             return rows
 

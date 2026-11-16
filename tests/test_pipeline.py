@@ -406,3 +406,60 @@ def test_a_run_where_everything_failed_is_failed_not_partial():
     assert result.status is AcquisitionStatus.FAILED
     assert not result.ok
     assert result.artifacts == []
+
+
+# --- country configuration ----------------------------------------------
+
+def test_every_country_has_its_own_day_boundary(conn, loaded):
+    """F11: Africa/Nairobi was hardcoded in the connector, which is an
+    hour wrong for Rwanda and Burundi. The zone belongs to the country."""
+    rows = db.query(conn, "SELECT country_iso3, timezone FROM country_config")
+    zones = {r["country_iso3"]: r["timezone"] for r in rows}
+    assert len(zones) == 5
+    assert all(zones.values()), "a missing zone must stop a fetch, not default"
+    assert zones["RWA"] != zones["KEN"]
+    assert zones["BDI"] != zones["KEN"]
+
+
+def test_points_know_which_country_they_are_in(conn, loaded):
+    """Without this the ingest script cannot attach the right zone."""
+    points = places.subnational_points(conn, ["KEN"])
+    assert points and all(p["country_iso3"] == "KEN" for p in points)
+
+
+# --- F6: whose word the freshness signal rests on -----------------------
+
+def test_a_declared_publication_date_beats_our_own_output(conn, loaded):
+    """MAX(period_end) can never outrun what ATLAS asked for, so a
+    backfill bounded at a fixed end date reported every source as dormant
+    for ever. The World Bank states `lastupdated`; that is the answer."""
+    from datetime import date
+
+    freshness.record_attempt(conn, "worldbank", succeeded=True)
+    freshness.record_publication(conn, "worldbank", date(2026, 11, 11))
+
+    row = db.query_one(
+        conn, "SELECT last_source_publication, publication_basis "
+              "FROM dataset_freshness WHERE source_id = 'worldbank'")
+    assert row["last_source_publication"] == date(2026, 11, 11)
+    assert row["publication_basis"] == "declared"
+
+
+def test_an_inferred_date_is_never_stored_as_the_sources_own(conn, loaded):
+    """Open-Meteo's archive declares no publication date. The fallback is
+    still useful, but it has to be labelled as ours rather than theirs."""
+    freshness.record_attempt(conn, "open-meteo", succeeded=True)
+
+    row = db.query_one(
+        conn, "SELECT last_source_publication, publication_basis "
+              "FROM dataset_freshness WHERE source_id = 'open-meteo'")
+    assert row["publication_basis"] == "observed"
+    assert row["last_source_publication"] is None
+
+
+def test_status_says_which_basis_each_source_is_on(conn, loaded):
+    """A consumer cannot weigh `stale` without knowing whether it came
+    from the source or from us."""
+    freshness.record_attempt(conn, "open-meteo", succeeded=True)
+    report = {r["source_id"]: r for r in freshness.status_report(conn)}
+    assert report["open-meteo"]["publication_basis"] in {"observed", "none"}

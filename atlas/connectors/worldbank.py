@@ -9,7 +9,7 @@ reaches `pages`, landing each page as its own artifact.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from ..acquisition import AcquisitionResult, Artifact, ObservationRow
@@ -82,8 +82,39 @@ class WorldBankConnector(Connector):
               resolver: Resolver) -> list[ObservationRow]:
         rows: list[ObservationRow] = []
         self.unresolved: list[dict] = []
-        if not isinstance(payload, list) or len(payload) < 2:
+        self.source_publication: date | None = None
+        if not isinstance(payload, list) or not payload:
             return rows
+
+        meta = payload[0] if isinstance(payload[0], dict) else {}
+
+        # A bad country or indicator code comes back as HTTP 200 with a
+        # one-element list carrying an error object instead of the usual
+        # metadata-plus-records pair. Recorded from the live API on
+        # 2026-11-16; no hand-written fixture had this shape. Returning
+        # zero rows makes a typo indistinguishable from a source with
+        # nothing to report, and marks the artifact parsed so it is never
+        # retried.
+        if "message" in meta:
+            messages = meta.get("message") or []
+            first = messages[0] if isinstance(messages, list) and messages else {}
+            raise ValueError(
+                f"{self.spec.source_id}: HTTP 200 carrying an error object "
+                f"({first.get('key')}: {first.get('value')}). Check the "
+                "country and indicator codes in the request."
+            )
+
+        if len(payload) < 2:
+            return rows
+
+        # The metadata element states when the World Bank last revised
+        # this series. It is the only honest answer to "has the source
+        # published?", because everything else available to us is our own
+        # output read back.
+        try:
+            self.source_publication = date.fromisoformat(meta["lastupdated"])
+        except (KeyError, TypeError, ValueError):
+            self.source_publication = None
 
         records = payload[1] or []
         for record in records:

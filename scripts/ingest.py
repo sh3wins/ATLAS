@@ -43,12 +43,18 @@ def main() -> int:
 
     # --- stage 1: read configuration -------------------------------------
     with db.connect() as conn:
-        countries = [c["country_iso3"] for c in db.enabled_countries(conn)]
+        configs = db.enabled_countries(conn)
+        countries = [c["country_iso3"] for c in configs]
         if not countries:
             print("no countries enabled in country_config", file=sys.stderr)
             return 1
+        zones = {c["country_iso3"]: c["timezone"] for c in configs}
         points = (places.subnational_points(conn, countries)
                   if args.source == "open-meteo" else [])
+        # A daily total is cut at local midnight, so each point carries
+        # its own country's zone instead of inheriting Kenya's.
+        for point in points:
+            point["timezone"] = zones.get(point["country_iso3"])
         if args.source == "open-meteo" and not args.skip_fetch:
             if not points:
                 print("no subnational places with geometry; run load_places.py first",
@@ -111,6 +117,15 @@ def main() -> int:
         report = standardise.standardise_pending(conn, storage, args.source)
     print(f"parsed {report.artifacts_read} artifact(s) -> "
           f"{report.rows_written} observation(s) written")
+
+    # Only now is the source's own publication date known: it lives in the
+    # response body, not the response headers, so it arrives with parsing
+    # rather than with acquisition.
+    with db.connect() as conn:
+        freshness.record_publication(conn, args.source,
+                                     report.source_publication)
+    if report.source_publication:
+        print(f"source declares it last published {report.source_publication}")
     if report.artifacts_failed:
         print(f"{report.artifacts_failed} artifact(s) left unparsed for retry:",
               file=sys.stderr)

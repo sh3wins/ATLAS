@@ -19,9 +19,10 @@ period the SOURCE has published, never from when ATLAS last ran. A
 pipeline that fetches perfectly from a dormant source must read `stale`,
 not `current`.
 
-Thresholds are per source. ERA5 reanalysis runs months behind real time
-by design and World Bank indicators arrive annually; one global rule
-would flag correct data and train users to ignore the warning.
+Thresholds are per source. The Open-Meteo archive publishes ERA5 about
+five days behind real time by design (expected_lag_days=5) and World Bank
+indicators arrive annually; one global rule would flag correct data and
+train users to ignore the warning.
 """
 from __future__ import annotations
 
@@ -174,6 +175,25 @@ def observed_publication(conn: psycopg.Connection, source_id: str) -> date | Non
     return row["newest"] if row else None
 
 
+def record_publication(conn: psycopg.Connection, source_id: str,
+                       published: date | None) -> None:
+    """Store what the SOURCE said about its own publishing.
+
+    Only a declaration by the source reaches this column. Anything read
+    off ATLAS's own tables is observed, not declared, and keeping the two
+    apart is the whole point: a number we produced cannot be evidence
+    about somebody else's publishing schedule.
+    """
+    if published is not None:
+        db.execute(
+            conn,
+            "UPDATE dataset_freshness SET last_source_publication = %s, "
+            "updated_at = now() WHERE source_id = %s",
+            (published, source_id),
+        )
+    recompute(conn, source_id)
+
+
 def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
     where = "WHERE f.source_id = %s" if source_id else ""
     params = (source_id,) if source_id else None
@@ -188,9 +208,17 @@ def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
         params,
     )
     for row in rows:
-        # Prefer what we actually hold over what was last recorded.
-        published = observed_publication(conn, row["source_id"]) \
-            or row["last_source_publication"]
+        # The source's own word beats anything inferred from our tables.
+        # MAX(period_end) cannot outrun what ATLAS asked for, so a
+        # backfill with a fixed end date would otherwise report a healthy
+        # source as dormant for ever.
+        declared = row["last_source_publication"]
+        if declared is not None:
+            published, basis = declared, "declared"
+        else:
+            observed = observed_publication(conn, row["source_id"])
+            published, basis = ((observed, "observed") if observed
+                                else (None, "none"))
         status = classify(
             expected_frequency=row["expected_frequency"],
             last_successful=row["last_successful_update"],
@@ -202,11 +230,10 @@ def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
         db.execute(
             conn,
             "UPDATE dataset_freshness "
-            "SET freshness_status = %s, "
-            "    last_source_publication = COALESCE(%s, last_source_publication), "
+            "SET freshness_status = %s, publication_basis = %s, "
             "    updated_at = now() "
             "WHERE source_id = %s",
-            (status, published, row["source_id"]),
+            (status, basis, row["source_id"]),
         )
 
 
@@ -222,6 +249,7 @@ def status_report(conn: psycopg.Connection) -> list[dict]:
                f.last_attempted_update,
                f.last_successful_update,
                f.last_source_publication,
+               f.publication_basis,
                f.freshness_status,
                f.consecutive_failures,
                f.last_error

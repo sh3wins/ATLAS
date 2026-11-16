@@ -1,0 +1,79 @@
+[
+ {
+  "name": "worldbank_gdp_ken",
+  "url": "https://api.worldbank.org/v2/country/KEN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100",
+  "why": "the ordinary case, and the newest year is routinely null",
+  "status": 200,
+  "content_type": "application/json;charset=utf-8",
+  "fetched_at": "2026-11-16T11:24:59.776255+00:00",
+  "sha256_of_response_bytes": "6d4e059ae38ad6e9f74d5ab52a8974e370bb81e2b3dbdb2a8e0b9cfb39e0833e",
+  "bytes": 14341,
+  "json": true
+ },
+ {
+  "name": "worldbank_unknown_country",
+  "url": "https://api.worldbank.org/v2/country/ZZZ/indicator/NY.GDP.PCAP.CD?format=json&per_page=5",
+  "why": "what an unknown code returns -- an error object, not an HTTP error",
+  "status": 200,
+  "content_type": "application/json;charset=utf-8",
+  "fetched_at": "2026-11-16T11:26:26.931408+00:00",
+  "sha256_of_response_bytes": "f230e5b6d8f652aa544aec29624faa117c27571ce309a7a474584e1cfeb45c1b",
+  "bytes": 102,
+  "json": true
+ },
+ {
+  "name": "worldbank_unknown_indicator",
+  "url": "https://api.worldbank.org/v2/country/KEN/indicator/NOT.AN.INDICATOR?format=json&per_page=5",
+  "why": "an indicator that does not exist",
+  "status": 200,
+  "content_type": "application/json;charset=utf-8",
+  "fetched_at": "2026-11-16T11:28:05.917173+00:00",
+  "sha256_of_response_bytes": "f230e5b6d8f652aa544aec29624faa117c27571ce309a7a474584e1cfeb45c1b",
+  "bytes": 102,
+  "json": true
+ },
+ {
+  "name": "open_meteo_nairobi",
+  "url": "https://archive-api.open-meteo.com/v1/archive?latitude=-1.2921%2C-4.0435&longitude=36.8219%2C39.6682&start_date=2024-01-01&end_date=2024-01-05&daily=precipitation_sum&timezone=Africa%2FNairobi",
+  "why": "two coordinates in one request, Kenya's day boundary",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "fetched_at": "2026-11-16T11:28:06.557113+00:00",
+  "sha256_of_response_bytes": "faca038481602be698491d2f5d23fb9ec2b10172fbede61ba1a1f4f9d0c07eae",
+  "bytes": 777,
+  "json": true
+ },
+ {
+  "name": "open_meteo_kigali",
+  "url": "https://archive-api.open-meteo.com/v1/archive?latitude=-1.9441&longitude=30.0619&start_date=2024-01-01&end_date=2024-01-05&daily=precipitation_sum&timezone=Africa%2FKigali",
+  "why": "a single coordinate, and the other East African timezone",
+  "status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "fetched_at": "2026-11-16T11:28:06.714941+00:00",
+  "sha256_of_response_bytes": "70b00d28e6e1d2e6b6b8c0b1c4908cce79bd544c1bd25ba02327a0df63d76fad",
+  "bytes": 377,
+  "json": true
+ },
+ {
+  "name": "open_meteo_future_dates",
+  "url": "https://archive-api.open-meteo.com/v1/archive?latitude=-1.2921&longitude=36.8219&start_date=2099-01-01&end_date=2099-01-05&daily=precipitation_sum&timezone=Africa%2FNairobi",
+  "why": "a window the archive cannot have -- the empty/error shape",
+  "status": 400,
+  "content_type": "application/json; charset=utf-8",
+  "fetched_at": "2026-11-16T11:28:06.865990+00:00",
+  "sha256_of_response_bytes": "4101774e0ae6c2389b95958ea463be03973dcdddded6422378549b8251e0cf1f",
+  "bytes": 38,
+  "json": true
+ },
+ {
+  "name": "geoboundaries_ken_adm1",
+  "url": "https://www.geoboundaries.org/api/current/gbOpen/KEN/ADM1/",
+  "why": "metadata only; the geometry download is fetched separately",
+  "status": 200,
+  "content_type": "application/json",
+  "fetched_at": "2026-11-16T11:28:07.932956+00:00",
+  "sha256_of_response_bytes": "fd14563ea85bd6906e3db4957b9133792bc4d9861eaca93b663163d54be71da7",
+  "bytes": 1710,
+  "json": true
+ }
+]

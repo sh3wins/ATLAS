@@ -26,6 +26,7 @@ class StandardiseReport:
     artifacts_read: int = 0
     rows_written: int = 0
     artifacts_failed: int = 0
+    source_publication: object = None
     errors: list[str] = None
 
     def __post_init__(self):
@@ -84,6 +85,11 @@ def standardise_pending(conn: psycopg.Connection, storage: Storage,
 
             report.artifacts_read += 1
             report.rows_written += written
+
+            declared = getattr(connector, "source_publication", None)
+            if declared is not None and (report.source_publication is None
+                                         or declared > report.source_publication):
+                report.source_publication = declared
         except Exception as exc:  # noqa: BLE001
             # Only this artifact is rolled back; it stays unparsed, so a
             # fix plus a re-run picks it up. Earlier artifacts in this run

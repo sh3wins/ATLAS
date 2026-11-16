@@ -123,7 +123,7 @@ def enabled_countries(conn: psycopg.Connection) -> list[dict]:
     return query(
         conn,
         """
-        SELECT country_iso3, name, subnational_level, level_name
+        SELECT country_iso3, name, subnational_level, level_name, timezone
         FROM country_config WHERE enabled ORDER BY country_iso3
         """,
     )

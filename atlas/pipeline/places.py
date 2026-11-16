@@ -103,7 +103,7 @@ def subnational_points(conn: psycopg.Connection, iso3_list: list[str]) -> list[d
     rows = db.query(
         conn,
         """
-        SELECT place_id,
+        SELECT place_id, country_iso3,
                ST_Y(ST_Centroid(geom))::numeric(9,4) AS lat,
                ST_X(ST_Centroid(geom))::numeric(9,4) AS lon
         FROM place
@@ -112,7 +112,8 @@ def subnational_points(conn: psycopg.Connection, iso3_list: list[str]) -> list[d
         """,
         (iso3_list,),
     )
-    return [{"place_id": r["place_id"], "lat": float(r["lat"]), "lon": float(r["lon"])}
+    return [{"place_id": r["place_id"], "country_iso3": r["country_iso3"],
+             "lat": float(r["lat"]), "lon": float(r["lon"])}
             for r in rows]
 
 

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from atlas import db
 from atlas.api.main import app, get_conn
 from atlas.connectors import GeoBoundariesConnector
+from atlas.connectors.open_meteo import coord_code
 from atlas.pipeline import aggregate, places, standardise
 from atlas.storage import content_hash
 
@@ -16,8 +17,12 @@ def client(conn, storage, fixtures):
     kenya = places.upsert_country(conn, "KEN", "Kenya")
     rows = GeoBoundariesConnector.to_places(fixtures["geoboundaries"], kenya, "county")
     places.upsert_subnational(conn, rows)
-    county_ids = [r["place_id"] for r in db.query(
-        conn, "SELECT place_id FROM place WHERE level='adm1' ORDER BY place_id")]
+    # Coordinates are Open-Meteo's codes for these places; without the
+    # crosswalk entries nothing in its response resolves.
+    places.ensure_coordinate_crosswalk(conn, ["KEN"])
+    points = places.subnational_points(conn, ["KEN"])
+    county_ids = [p["place_id"] for p in points]
+    county_codes = [coord_code(p["lat"], p["lon"]) for p in points]
 
     wb_key, wb_body = storage.put_json("worldbank", fixtures["worldbank"])
     db.record_raw_object(
@@ -25,7 +30,7 @@ def client(conn, storage, fixtures):
         {"url": "https://api.worldbank.org/v2/country/KEN/indicator/NY.GDP.PCAP.CD"},
         "2026-11-16T00:00:00Z", content_hash(wb_body), 200, "application/json", len(wb_body))
 
-    om_payload = {**fixtures["open_meteo"], "places": county_ids}
+    om_payload = {**fixtures["open_meteo"], "codes": county_codes}
     om_key, om_body = storage.put_json("open-meteo", om_payload)
     db.record_raw_object(
         conn, om_key, "open-meteo", {"url": "https://archive-api.open-meteo.com/v1/archive"},

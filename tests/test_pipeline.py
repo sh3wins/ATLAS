@@ -10,6 +10,7 @@ import pytest
 from atlas import db
 from atlas.acquisition import AcquisitionResult, Artifact
 from atlas.connectors import GeoBoundariesConnector
+from atlas.connectors.open_meteo import coord_code
 from atlas.pipeline import aggregate, freshness, places, standardise
 from atlas.storage import content_hash
 
@@ -21,10 +22,12 @@ def loaded(conn, storage, fixtures):
     rows = GeoBoundariesConnector.to_places(fixtures["geoboundaries"], kenya, "county")
     places.upsert_subnational(conn, rows)
 
-    county_ids = [
-        r["place_id"] for r in db.query(
-            conn, "SELECT place_id FROM place WHERE level = 'adm1' ORDER BY place_id")
-    ]
+    # Coordinates are Open-Meteo's codes for these places; without the
+    # crosswalk entries nothing in its response resolves.
+    places.ensure_coordinate_crosswalk(conn, ["KEN"])
+    points = places.subnational_points(conn, ["KEN"])
+    county_ids = [p["place_id"] for p in points]
+    county_codes = [coord_code(p["lat"], p["lon"]) for p in points]
 
     # Land the World Bank payload exactly as acquisition would.
     wb_key, wb_body = storage.put_json("worldbank", fixtures["worldbank"])
@@ -34,7 +37,7 @@ def loaded(conn, storage, fixtures):
         "2026-11-16T00:00:00Z", content_hash(wb_body), 200, "application/json", len(wb_body))
 
     # Open-Meteo, re-pointed at the real county place_ids.
-    om_payload = {**fixtures["open_meteo"], "places": county_ids}
+    om_payload = {**fixtures["open_meteo"], "codes": county_codes}
     om_key, om_body = storage.put_json("open-meteo", om_payload)
     db.record_raw_object(
         conn, om_key, "open-meteo",
@@ -43,7 +46,7 @@ def loaded(conn, storage, fixtures):
 
     standardise.standardise_pending(conn, storage, "worldbank")
     standardise.standardise_pending(conn, storage, "open-meteo")
-    return {"kenya": kenya, "counties": county_ids,
+    return {"kenya": kenya, "counties": county_ids, "codes": county_codes,
             "wb_key": wb_key, "om_key": om_key}
 
 
@@ -218,6 +221,7 @@ def _t(**kw):
         consecutive_failures=0,                   # nothing is erroring
         last_source_publication=now.date(),       # source is up to date
         expected_lag=timedelta(0),
+        run_interval=timedelta(days=1),          # ATLAS runs this one daily
         now=now,
     )
     args.update(kw)
@@ -248,10 +252,27 @@ def test_broken_pipeline_is_failing_even_when_the_source_is_fresh(conn, loaded):
 
 def test_a_scheduler_that_silently_stopped_reads_failing(conn, loaded):
     """No errors are raised when nothing runs at all, so
-    consecutive_failures stays 0. Age of the last success catches it."""
+    consecutive_failures stays 0. Age of the last success catches it --
+    measured against ATLAS's own schedule."""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     assert _t(last_successful=now - timedelta(days=30)) == "failing"
+
+
+def test_dead_scheduler_is_measured_against_our_schedule_not_the_sources(conn, loaded):
+    """An earlier version compared the age of our last run against the
+    SOURCE's publication cadence, so an annual source tolerated 486 days
+    of silence from a dead cron before anyone was told."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    forty_days = dict(expected_frequency="annual",
+                      last_successful=now - timedelta(days=40),
+                      last_source_publication=now.date())
+
+    # Monthly schedule, 40 days of silence -> our cron is dead.
+    assert _t(**forty_days, run_interval=timedelta(days=30)) == "failing"
+    # No schedule recorded: say nothing rather than guess either way.
+    assert _t(**forty_days, run_interval=None) != "failing"
 
 
 def test_expected_lag_keeps_a_reanalysis_source_current(conn, loaded):
@@ -309,12 +330,13 @@ def test_one_bad_artifact_does_not_discard_the_good_ones(conn, storage, loaded):
         conn, "SELECT count(*) AS n FROM observation "
               "WHERE source_id='open-meteo'")["n"]
 
-    # One valid artifact, one whose place/location counts disagree -- the
-    # Open-Meteo parser refuses to guess the alignment and raises.
-    good = {"places": [loaded["counties"][0]], "variable": "precipitation_sum",
+    # One valid artifact, one whose coordinate/location counts disagree --
+    # the Open-Meteo parser refuses to guess the alignment and raises.
+    code = loaded["codes"][0]
+    good = {"codes": [code], "variable": "precipitation_sum",
             "locations": [{"daily": {"time": ["2024-06-01"],
                                      "precipitation_sum": [4.2]}}]}
-    bad = {"places": [1, 2, 3], "variable": "precipitation_sum",
+    bad = {"codes": [code, code, code], "variable": "precipitation_sum",
            "locations": [{"daily": {"time": ["2024-06-01"],
                                     "precipitation_sum": [1.0]}}]}
 
@@ -340,7 +362,7 @@ def test_report_counts_match_what_was_committed(conn, storage, loaded):
     """The number the run prints must equal the number in the database."""
     from atlas.storage import content_hash
 
-    payload = {"places": [loaded["counties"][0]],
+    payload = {"codes": [loaded["codes"][0]],
                "variable": "precipitation_sum",
                "locations": [{"daily": {"time": ["2024-07-01", "2024-07-02"],
                                         "precipitation_sum": [1.5, 2.5]}}]}

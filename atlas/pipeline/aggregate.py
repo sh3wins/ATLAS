@@ -87,7 +87,10 @@ def rollup(conn: psycopg.Connection, indicator_code: str, target_grain: str,
     if trunc is None:
         raise KeyError(f"cannot roll up to {target_grain!r}")
 
-    where_place = "AND place_id = ANY(%(place_ids)s)" if place_ids else ""
+    # `is not None`, not truthiness: an empty list means "no places",
+    # and dropping the clause would roll up every place instead.
+    where_place = ("AND place_id = ANY(%(place_ids)s)"
+                   if place_ids is not None else "")
 
     # period_end is the last day actually covered, NOT the nominal end of
     # the period. Three months of daily data rolled to 'year' therefore

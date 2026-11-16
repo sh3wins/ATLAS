@@ -9,6 +9,7 @@ reaches `pages`, landing each page as its own artifact.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from ..acquisition import AcquisitionResult, Artifact, ObservationRow
@@ -41,7 +42,10 @@ class WorldBankConnector(Connector):
         code_list = ";".join(countries)
         url = f"{settings.worldbank_base}/country/{code_list}/indicator/{indicator}"
 
-        date_range = f"{start_year}:{end_year}" if end_year else None
+        # end_year is optional; the API accepts an open upper bound.
+        # Previously the range was only built when BOTH were given, so
+        # --start-year was silently discarded on every documented call.
+        date_range = f"{start_year}:{end_year or datetime.now(timezone.utc).year}"
         page = 1
         while True:
             params = {"format": "json", "per_page": PER_PAGE, "page": page}
@@ -77,21 +81,31 @@ class WorldBankConnector(Connector):
     def parse(self, payload: Any, artifact: Artifact,
               resolver: Resolver) -> list[ObservationRow]:
         rows: list[ObservationRow] = []
+        self.unresolved: list[dict] = []
         if not isinstance(payload, list) or len(payload) < 2:
             return rows
 
         records = payload[1] or []
         for record in records:
-            iso3 = record.get("countryiso3code") or (record.get("country") or {}).get("id")
+            # NOT a fallback to country.id -- that field is ISO2 ("KE"),
+            # while the crosswalk is seeded with ISO3. Falling back to it
+            # produced a code that never resolves, and the row was dropped
+            # with no counter and no log.
+            iso3 = (record.get("countryiso3code") or "").strip() or None
             indicator_code = (record.get("indicator") or {}).get("id")
             year = record.get("date")
             if not (iso3 and indicator_code and year):
+                self.unresolved.append(
+                    {"iso3": iso3, "indicator": indicator_code, "period": year})
                 continue
 
             place_id = resolver.place(self.spec.source_id, iso3)
             indicator = resolver.indicator(self.spec.source_id, indicator_code)
-            # An unknown code is skipped, never guessed into a place.
+            # An unknown code is skipped, never guessed into a place -- but
+            # loudly. Silent drops here hid an entire country's series.
             if place_id is None or indicator is None:
+                self.unresolved.append(
+                    {"iso3": iso3, "indicator": indicator_code, "period": year})
                 continue
 
             raw_value = record.get("value")

@@ -6,9 +6,10 @@ Time vocabulary:     daily values in a named timezone.
 Two things this connector has to get right that the World Bank one
 doesn't:
 
-1. Coordinates, not codes. Each request is tied to a place by the
-   centroid it was issued for, so the chunk carries the place_id and the
-   parse step reads it back. There is no code in the response to look up.
+1. Coordinates, not codes. The response carries no identifier, so the
+   coordinate the request was issued for IS the source's code for that
+   place, crosswalked like any other. Never the ATLAS place_id, which is
+   assigned by the database and renumbers on a rebuild: see coord_code.
 
 2. A local calendar. Daily values are requested with
    timezone=Africa/Nairobi, so a "day" means a Kenyan day. Converting
@@ -30,6 +31,20 @@ from .base import Connector, ConnectorSpec, Resolver
 # Open-Meteo accepts comma-separated coordinates. Batching matters more
 # than the daily call ceiling: one request for 47 counties beats 47.
 MAX_COORDS_PER_REQUEST = 50
+
+
+def coord_code(lat: float, lon: float) -> str:
+    """Open-Meteo's identifier for a place: its coordinate.
+
+    The response carries no place code, so something has to tie a location
+    back to a place. It must NOT be an ATLAS place_id: those are
+    `GENERATED ALWAYS AS IDENTITY`, so rebuilding the serving database
+    renumbers them and re-parsing old raw files would write one county's
+    rainfall against another -- a plausible value, right unit, wrong place,
+    no error. The coordinate is the source's own handle and survives any
+    rebuild, so it goes in the crosswalk like every other source code.
+    """
+    return f"{float(lat):.4f},{float(lon):.4f}"
 
 
 class OpenMeteoConnector(Connector):
@@ -69,13 +84,15 @@ class OpenMeteoConnector(Connector):
             if settings.open_meteo_api_key:
                 params["apikey"] = settings.open_meteo_api_key
 
-            # place_ids ride along in the chunk: the response has no code
-            # to look up, so the mapping has to be carried, not inferred.
+            # Coordinates ride along as the source's own codes. Resolving
+            # them to places happens at parse time, through the crosswalk.
+            codes = [coord_code(p["lat"], p["lon"]) for p in batch]
             chunk = {
                 "url": settings.open_meteo_base,
                 "params": {k: v for k, v in params.items() if k != "apikey"},
-                "place_ids": [p["place_id"] for p in batch],
+                "codes": codes,
                 "variable": variable,
+                "timezone": timezone,
             }
 
             try:
@@ -91,8 +108,8 @@ class OpenMeteoConnector(Connector):
             if isinstance(payload, dict):
                 payload = [payload]
 
-            self._land(result, {"places": chunk["place_ids"], "variable": variable,
-                                "locations": payload},
+            self._land(result, {"codes": codes, "variable": variable,
+                                "timezone": timezone, "locations": payload},
                        chunk, response.status_code)
 
         return result
@@ -100,34 +117,72 @@ class OpenMeteoConnector(Connector):
     def parse(self, payload: Any, artifact: Artifact,
               resolver: Resolver) -> list[ObservationRow]:
         rows: list[ObservationRow] = []
+        self.unresolved: list[str] = []
         if not isinstance(payload, dict):
             return rows
 
-        place_ids = payload.get("places") or []
         variable = payload.get("variable") or "precipitation_sum"
         locations = payload.get("locations") or []
+        codes = payload.get("codes")
+
+        if codes is None:
+            if "places" in payload:
+                # Landed before coordinates became the source code. Its
+                # place_ids refer to a numbering that may no longer hold,
+                # and guessing would silently misattribute counties.
+                raise ValueError(
+                    f"{artifact.key}: legacy artifact keyed on ATLAS place_id; "
+                    "re-fetch it rather than re-parsing"
+                )
+            return rows
 
         indicator = resolver.indicator(self.spec.source_id, variable)
         if indicator is None:
             return rows
 
         # Responses come back in request order, which is the only thing
-        # tying a location to its place. A length mismatch means that
-        # assumption broke, and inventing an alignment would silently
-        # attribute one county's rainfall to another.
-        if len(place_ids) != len(locations):
+        # tying a location to its coordinate. A length mismatch means that
+        # assumption broke, and inventing an alignment would attribute one
+        # county's rainfall to another.
+        if len(codes) != len(locations):
             raise ValueError(
-                f"{self.spec.source_id}: {len(place_ids)} places requested but "
+                f"{self.spec.source_id}: {len(codes)} coordinates requested but "
                 f"{len(locations)} returned -- refusing to guess the alignment"
             )
 
-        for place_id, location in zip(place_ids, locations):
+        for code, location in zip(codes, locations):
+            place_id = resolver.place(self.spec.source_id, code)
+            if place_id is None:
+                self.unresolved.append(code)
+                continue
+
+            # The response states its own units. Not checking them is how a
+            # provider default change, or a self-hosted endpoint answering
+            # in inches, becomes a silent 25.4x error in a platform whose
+            # stated purpose is unit harmonisation.
+            declared = (location.get("daily_units") or {}).get(variable)
+            expected = indicator.get("unit")
+            if declared and expected and declared != expected:
+                raise ValueError(
+                    f"{self.spec.source_id}: {variable} returned in {declared!r} "
+                    f"but the registry declares {expected!r} -- refusing to store"
+                )
+
             daily = location.get("daily") or {}
-            dates = daily.get("time") or []
-            values = daily.get(variable) or []
+            dates = daily.get("time")
+            values = daily.get(variable)
+            if not dates or values is None:
+                # An HTTP 200 whose body carries no series for this point.
+                # Skipping it loses that place's whole period permanently
+                # and marks the artifact parsed, so fail loudly instead.
+                raise ValueError(
+                    f"{self.spec.source_id}: no {variable} series for {code} "
+                    "in an otherwise successful response"
+                )
             if len(dates) != len(values):
                 raise ValueError(
-                    f"{self.spec.source_id}: {len(dates)} dates but {len(values)} values"
+                    f"{self.spec.source_id}: {len(dates)} dates but "
+                    f"{len(values)} values for {code}"
                 )
 
             for date, raw_value in zip(dates, values):

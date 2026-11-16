@@ -143,6 +143,15 @@ DO UPDATE SET value          = EXCLUDED.value,
               raw_ref        = EXCLUDED.raw_ref,
               quality        = EXCLUDED.quality,
               ingested_at    = now()
+-- Skip rows whose content is unchanged, so rowcount is "rows that
+-- actually changed" rather than "rows sent". Re-parsing is meant to be
+-- free and frequent; a run that reports 4,732 observations written when
+-- it changed nothing trains you to ignore the number.
+WHERE observation.value          IS DISTINCT FROM EXCLUDED.value
+   OR observation.missing_reason IS DISTINCT FROM EXCLUDED.missing_reason
+   OR observation.period_end     IS DISTINCT FROM EXCLUDED.period_end
+   OR observation.raw_ref        IS DISTINCT FROM EXCLUDED.raw_ref
+   OR observation.quality        IS DISTINCT FROM EXCLUDED.quality
 """
 
 
@@ -157,4 +166,4 @@ def upsert_observations(conn: psycopg.Connection, rows: list[dict]) -> int:
         return 0
     with conn.cursor() as cur:
         cur.executemany(UPSERT_OBSERVATION, rows)
-    return len(rows)
+        return cur.rowcount

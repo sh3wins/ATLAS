@@ -60,11 +60,11 @@ def world_bank():
     return [meta, rows]
 
 
-def open_meteo(place_ids):
+def open_meteo(codes):
     random.seed(7)
     dates = [f"2024-01-{d:02d}" for d in range(1, 32)]
     locations = []
-    for i, _ in enumerate(place_ids):
+    for i, _ in enumerate(codes):
         values = [round(random.uniform(0, 18), 1) for _ in dates]
         values[3] = None  # a genuine gap, must not become a zero
         locations.append({
@@ -75,8 +75,8 @@ def open_meteo(place_ids):
             "daily_units": {"time": "iso8601", "precipitation_sum": "mm"},
             "daily": {"time": dates, "precipitation_sum": values},
         })
-    return {"places": list(place_ids), "variable": "precipitation_sum",
-            "locations": locations}
+    return {"codes": list(codes), "variable": "precipitation_sum",
+            "timezone": "Africa/Nairobi", "locations": locations}
 
 
 def geoboundaries():
@@ -99,7 +99,9 @@ def geoboundaries():
 def main():
     (HERE / "worldbank_gdp_ken.json").write_text(json.dumps(world_bank(), indent=1))
     (HERE / "open_meteo_ken_jan2024.json").write_text(
-        json.dumps(open_meteo([101, 102, 103, 104, 105]), indent=1))
+        json.dumps(open_meteo(
+            [f"{(s_ + n) / 2:.4f},{(w + e) / 2:.4f}"
+             for _, _, w, e, s_, n in COUNTIES]), indent=1))
     (HERE / "geoboundaries_ken_adm1.json").write_text(json.dumps(geoboundaries(), indent=1))
     for p in sorted(HERE.glob("*.json")):
         print(f"{p.name:34} {p.stat().st_size:>7,} bytes")

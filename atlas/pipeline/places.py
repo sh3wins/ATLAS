@@ -11,6 +11,7 @@ from __future__ import annotations
 import psycopg
 
 from .. import db
+from ..connectors.open_meteo import coord_code
 
 
 def upsert_country(conn: psycopg.Connection, iso3: str, name: str) -> int:
@@ -134,3 +135,27 @@ def place_containing(conn: psycopg.Connection, lat: float, lon: float,
         """,
         (level, lon, lat),
     )
+
+
+def ensure_coordinate_crosswalk(conn: psycopg.Connection, iso3_list: list[int] | list[str],
+                                source_id: str = "open-meteo") -> int:
+    """Register each place's centroid as that source's code for it.
+
+    Coordinate-keyed sources return no place identifier, so without this
+    the only way to tie a response back to a place is positional — and
+    anything positional stored in the raw file ends up referring to
+    ATLAS's own surrogate keys, which do not survive a rebuild.
+    """
+    written = 0
+    for point in subnational_points(conn, iso3_list):
+        db.execute(
+            conn,
+            """
+            INSERT INTO place_crosswalk (source_id, source_code, place_id, confidence, note)
+            VALUES (%s, %s, %s, 'exact', 'centroid of the place geometry')
+            ON CONFLICT (source_id, source_code) DO UPDATE SET place_id = EXCLUDED.place_id
+            """,
+            (source_id, coord_code(point["lat"], point["lon"]), point["place_id"]),
+        )
+        written += 1
+    return written

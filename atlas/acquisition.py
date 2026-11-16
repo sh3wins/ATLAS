@@ -65,12 +65,27 @@ class AcquisitionResult:
 
     def add(self, artifact: Artifact) -> None:
         self.artifacts.append(artifact)
+        self._recompute()
 
     def fail_chunk(self, chunk: dict[str, Any], error: str) -> None:
         self.failed_chunks.append({**chunk, "error": error})
-        self.status = (
-            AcquisitionStatus.FAILED if not self.artifacts else AcquisitionStatus.PARTIAL
-        )
+        self._recompute()
+
+    def _recompute(self) -> None:
+        """Status is a function of both lists, recomputed on every change.
+
+        Order matters: connectors `continue` past a failed batch, so a run
+        can fail chunk 1 and then succeed on 46 more. Setting the status
+        only inside fail_chunk left that run reporting FAILED with 46
+        artifacts in hand, which made `record_attempt(succeeded=result.ok)`
+        count a 97%-successful night as an outage.
+        """
+        if not self.failed_chunks:
+            self.status = AcquisitionStatus.COMPLETE
+        elif self.artifacts:
+            self.status = AcquisitionStatus.PARTIAL
+        else:
+            self.status = AcquisitionStatus.FAILED
 
 
 @dataclass(frozen=True)

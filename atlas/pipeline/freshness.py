@@ -68,6 +68,7 @@ def _as_utc(value) -> datetime | None:
 def classify(*, expected_frequency: str | None, last_successful,
              consecutive_failures: int, last_source_publication=None,
              expected_lag: timedelta | None = None,
+             run_interval: timedelta | None = None,
              now: datetime | None = None) -> str:
     """Return one of: failing, stale, due, current, unknown.
 
@@ -94,9 +95,19 @@ def classify(*, expected_frequency: str | None, last_successful,
 
     # A scheduler that silently stopped produces no errors at all, so
     # consecutive_failures stays 0 while nothing runs. Age of the last
-    # SUCCESS catches that.
-    if now - last_successful > cadence + tolerance:
-        return "failing"
+    # SUCCESS catches that -- but only against OUR schedule. Measuring it
+    # against the source's publication cadence, as an earlier version did,
+    # allowed 486 days of silence for an annual source before anyone was
+    # told. With no run_interval recorded we cannot know, so we say
+    # nothing rather than guess.
+    if run_interval is not None:
+        # One missed run can be a blip; a second means nothing is running.
+        # The grace is additive and capped, not a multiple of the interval:
+        # 2x looks tidy but scales with the interval, so a 180-day boundary
+        # refresh would buy a dead scheduler most of a year of silence.
+        grace = min(run_interval, timedelta(days=2))
+        if now - last_successful > run_interval + grace:
+            return "failing"
 
     # --- axis 2: has the source published? ------------------------------
     # Not ours to fix. Never reported as `failing`.
@@ -170,7 +181,8 @@ def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
         conn,
         f"""
         SELECT f.source_id, f.last_successful_update, f.consecutive_failures,
-               f.last_source_publication, s.expected_frequency, s.expected_lag
+               f.last_source_publication, s.expected_frequency, s.expected_lag,
+               s.run_interval
         FROM dataset_freshness f JOIN source s USING (source_id) {where}
         """,
         params,
@@ -185,6 +197,7 @@ def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
             consecutive_failures=row["consecutive_failures"],
             last_source_publication=published,
             expected_lag=row["expected_lag"],
+            run_interval=row["run_interval"],
         )
         db.execute(
             conn,

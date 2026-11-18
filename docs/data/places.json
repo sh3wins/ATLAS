@@ -1,0 +1,389 @@
+{
+ "count": 48,
+ "places": [
+  {
+   "place_id": 14,
+   "name": "Baringo",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 38,
+   "name": "Bomet",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 17,
+   "name": "Bungoma",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 22,
+   "name": "Busia",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 15,
+   "name": "Elgeyo-Marakwet",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 36,
+   "name": "Embu",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 18,
+   "name": "Garissa",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 37,
+   "name": "Homa Bay",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 13,
+   "name": "Isiolo",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 46,
+   "name": "Kajiado",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 20,
+   "name": "Kakamega",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 30,
+   "name": "Kericho",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 44,
+   "name": "Kiambu",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 50,
+   "name": "Kilifi",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 35,
+   "name": "Kirinyaga",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 41,
+   "name": "Kisii",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 31,
+   "name": "Kisumu",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 34,
+   "name": "Kitui",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 52,
+   "name": "Kwale",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 21,
+   "name": "Laikipia",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 49,
+   "name": "Lamu",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 45,
+   "name": "Machakos",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 48,
+   "name": "Makueni",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 9,
+   "name": "Mandera",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 8,
+   "name": "Marsabit",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 23,
+   "name": "Meru",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 43,
+   "name": "Migori",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 53,
+   "name": "Mombasa",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 42,
+   "name": "Murang'a",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 47,
+   "name": "Nairobi",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 26,
+   "name": "Nakuru",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 24,
+   "name": "Nandi",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 40,
+   "name": "Narok",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 39,
+   "name": "Nyamira",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 28,
+   "name": "Nyandarua",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 32,
+   "name": "Nyeri",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 12,
+   "name": "Samburu",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 25,
+   "name": "Siaya",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 51,
+   "name": "Taita Taveta",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 33,
+   "name": "Tana River",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 29,
+   "name": "Tharaka",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 16,
+   "name": "Trans Nzoia",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 7,
+   "name": "Turkana",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 19,
+   "name": "Uasin Gishu",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 27,
+   "name": "Vihiga",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 10,
+   "name": "Wajir",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 11,
+   "name": "West Pokot",
+   "level": "adm1",
+   "level_name": "county",
+   "country_iso3": "KEN",
+   "parent_id": 1
+  },
+  {
+   "place_id": 1,
+   "name": "Kenya",
+   "level": "country",
+   "level_name": null,
+   "country_iso3": "KEN",
+   "parent_id": null
+  }
+ ]
+}

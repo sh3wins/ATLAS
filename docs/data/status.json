@@ -1,0 +1,56 @@
+{
+ "promise": "ATLAS commits to ingestion, validation, availability and delivery. It does not warrant that an upstream provider never changes its schema, restates a figure, or publishes inaccurate information.",
+ "sources": [
+  {
+   "source_id": "geoboundaries",
+   "name": "geoBoundaries (gbOpen)",
+   "licence": "CC-BY-4.0",
+   "expected_frequency": "irregular",
+   "freshness_status": "unknown",
+   "status_computed_at": "2026-11-18T22:02:54.615326Z",
+   "declared_publication": null,
+   "publication": null,
+   "publication_basis": "none",
+   "last_attempted_update": "2026-11-16T01:59:40.826271+03:00",
+   "last_successful_update": "2026-11-16T01:59:40.826271+03:00",
+   "consecutive_failures": 0,
+   "last_error": null,
+   "stored_status": "current",
+   "stored_status_written_at": "2026-11-16T01:59:33.812523+03:00"
+  },
+  {
+   "source_id": "open-meteo",
+   "name": "Open-Meteo Historical Weather API (ERA5)",
+   "licence": "CC-BY-4.0",
+   "expected_frequency": "daily",
+   "freshness_status": "failing",
+   "status_computed_at": "2026-11-18T22:02:54.615326Z",
+   "declared_publication": null,
+   "publication": "2024-03-31",
+   "publication_basis": "observed",
+   "last_attempted_update": "2026-11-16T02:08:01.446371+03:00",
+   "last_successful_update": "2026-11-16T02:08:01.446371+03:00",
+   "consecutive_failures": 0,
+   "last_error": null,
+   "stored_status": "failing",
+   "stored_status_written_at": "2026-11-19T00:53:47.849023+03:00"
+  },
+  {
+   "source_id": "worldbank",
+   "name": "World Bank Open Data",
+   "licence": "CC-BY-4.0",
+   "expected_frequency": "annual",
+   "freshness_status": "current",
+   "status_computed_at": "2026-11-18T22:02:54.615326Z",
+   "declared_publication": "2026-11-11",
+   "publication": "2026-11-11",
+   "publication_basis": "declared",
+   "last_attempted_update": "2026-11-16T14:43:41.308725+03:00",
+   "last_successful_update": "2026-11-16T14:43:41.308725+03:00",
+   "consecutive_failures": 0,
+   "last_error": null,
+   "stored_status": "current",
+   "stored_status_written_at": "2026-11-16T14:43:41.408142+03:00"
+  }
+ ]
+}

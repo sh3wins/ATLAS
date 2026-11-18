@@ -519,3 +519,34 @@ def test_a_refetch_that_changes_nothing_writes_nothing(conn, loaded):
          present["grain"], present["source_id"]))
     assert moved["raw_ref"].endswith("y.json"), \
         "a changed value repoints provenance at the fetch that changed it"
+
+
+def test_status_is_computed_now_not_read_from_the_cache(conn, loaded):
+    """freshness_status is written only when an ingest runs. A source
+    nobody has touched keeps whatever it was last told, so the cached
+    value can claim `current` about a pipeline that stopped months ago.
+    Reported state has to be worked out at read time."""
+    db.execute(
+        conn,
+        "UPDATE dataset_freshness "
+        "SET freshness_status = 'current', consecutive_failures = 0, "
+        "    last_successful_update = now() - interval '400 days' "
+        "WHERE source_id = 'open-meteo'")
+
+    row = {r["source_id"]: r for r in freshness.status_report(conn)}["open-meteo"]
+
+    assert row["stored_status"] == "current"
+    assert row["freshness_status"] == "failing", \
+        "400 days of silence on a daily schedule is not current"
+
+
+def test_status_never_reports_a_basis_its_state_contradicts(conn, loaded):
+    """geoBoundaries shipped as `current` with basis `none`, which
+    classify() cannot produce: no publication date means unknown."""
+    for row in freshness.status_report(conn):
+        if row["publication_basis"] == "none":
+            assert row["freshness_status"] in {"unknown", "failing"}, (
+                f"{row['source_id']}: basis none cannot be "
+                f"{row['freshness_status']}")
+        if row["publication_basis"] == "observed":
+            assert row["declared_publication"] is None

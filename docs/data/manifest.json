@@ -1,0 +1,51 @@
+{
+ "snapshot_taken_at": "2026-11-18T22:02:55.140882+00:00",
+ "note": "A static export of the ATLAS API. Correct as of the timestamp above and not updated since. Freshness states in status.json describe the pipeline at export time.",
+ "files": [
+  {
+   "name": "status",
+   "path": "/status",
+   "bytes": 2124
+  },
+  {
+   "name": "coverage",
+   "path": "/coverage",
+   "bytes": 1201
+  },
+  {
+   "name": "places",
+   "path": "/places?country=KEN",
+   "bytes": 7185
+  },
+  {
+   "name": "indicators",
+   "path": "/indicators",
+   "bytes": 699
+  },
+  {
+   "name": "observations/gdp_per_capita_usd.year",
+   "path": "/observations?indicator=gdp_per_capita_usd&grain=year&limit=10000",
+   "bytes": 24188
+  },
+  {
+   "name": "observations/precip_total_mm.day",
+   "path": "/observations?indicator=precip_total_mm&grain=day&limit=10000",
+   "bytes": 1493129
+  },
+  {
+   "name": "observations/precip_total_mm.month",
+   "path": "/observations?indicator=precip_total_mm&grain=month&limit=10000",
+   "bytes": 42509
+  },
+  {
+   "name": "observations/precip_total_mm.quarter",
+   "path": "/observations?indicator=precip_total_mm&grain=quarter&limit=10000",
+   "bytes": 14679
+  },
+  {
+   "name": "observations/precip_total_mm.year",
+   "path": "/observations?indicator=precip_total_mm&grain=year&limit=10000",
+   "bytes": 14535
+  }
+ ]
+}

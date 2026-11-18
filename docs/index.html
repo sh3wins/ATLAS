@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATLAS — East African data you can trace</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --line: #262c36;
+    --ink: #e6edf3; --dim: #8b949e; --faint: #5a636d;
+    --accent: #4aa3df; --warn: #d9a441; --bad: #e05c5c; --good: #58a65c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 17px; margin: 48px 0 12px; font-weight: 600; }
+  h2 .sub { font-weight: 400; color: var(--dim); font-size: 14px; margin-left: 8px; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--dim); max-width: 62ch; }
+  a { color: var(--accent); }
+  code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+
+  .snapshot {
+    margin: 24px 0 0; padding: 12px 16px; border-radius: 8px;
+    background: rgba(217,164,65,.08); border: 1px solid rgba(217,164,65,.3);
+    color: #e8cd96; font-size: 14px;
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; font-size: 12px;
+       text-transform: uppercase; letter-spacing: .06em; }
+  tr:last-child td { border-bottom: 0; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px;
+          font-size: 12px; border: 1px solid; }
+  .pill.current { color: var(--good); border-color: rgba(88,166,92,.4); }
+  .pill.stale, .pill.due { color: var(--warn); border-color: rgba(217,164,65,.4); }
+  .pill.failing { color: var(--bad); border-color: rgba(224,92,92,.4); }
+  .pill.unknown { color: var(--faint); border-color: var(--line); }
+  .bar { height: 6px; border-radius: 3px; background: var(--accent); min-width: 2px; }
+  .missing { color: var(--faint); font-style: italic; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line);
+           color: var(--dim); font-size: 13px; }
+  ul.notes { color: var(--dim); font-size: 14px; padding-left: 20px; }
+  ul.notes li { margin-bottom: 8px; }
+  .err { color: var(--bad); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>ATLAS</h1>
+  <p class="lede">
+    East African data you can trace: county resolution, standardised across
+    sources that disagree about places, time and units. Every published number
+    keeps the file it came from.
+  </p>
+  <div class="snapshot" id="snapshot">Loading…</div>
+
+  <h2>The reliability promise <span class="sub">what ATLAS does and does not commit to</span></h2>
+  <p class="lede" id="promise"></p>
+  <div class="panel"><table id="sources"></table></div>
+
+  <h2>Rainfall by county <span class="sub">ERA5 reanalysis via Open-Meteo</span></h2>
+  <div class="panel"><table id="rain"></table></div>
+
+  <h2>Coverage <span class="sub">the shape of the gaps, stated before you build on it</span></h2>
+  <div class="panel"><table id="coverage"></table></div>
+
+  <h2>Indicators</h2>
+  <div class="panel"><table id="indicators"></table></div>
+
+  <h2>Known limitations</h2>
+  <ul class="notes">
+    <li><strong>This page is a snapshot</strong>, not a live API. The freshness
+        states below describe the pipeline at the moment of export.</li>
+    <li><strong>One sample point per county.</strong> Each county's rainfall is
+        read from a single ERA5-Land cell. Turkana spans roughly 567 such cells
+        and Wajir 461, so these are point readings labelled with a county name,
+        not area averages.</li>
+    <li><strong>Values are modelled, not measured.</strong> ERA5 is a reanalysis
+        that assimilates observations; it is not a rain gauge.</li>
+    <li><strong>S3 is written but unverified</strong> against a real bucket.</li>
+    <li><strong>Five countries are supported in the schema; only Kenya has data.</strong>
+        Uganda, Tanzania, Rwanda and Burundi are architecture, not coverage.</li>
+  </ul>
+
+  <footer>
+    <div id="attribution"></div>
+    <p style="margin-top:14px">
+      Source: <a href="https://github.com/sh3wins/ATLAS">github.com/sh3wins/ATLAS</a>
+    </p>
+  </footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const get = name => fetch(`./data/${name}.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const num = (v, d = 0) => v === null || v === undefined
+  ? '<span class="missing">—</span>'
+  : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+
+function table(el, head, rows) {
+  if (!rows.length) { el.innerHTML = '<tr><td class="err">No data in this export.</td></tr>'; return; }
+  el.innerHTML =
+    "<thead><tr>" + head.map(h => `<th>${esc(h)}</th>`).join("") + "</tr></thead>" +
+    "<tbody>" + rows.join("") + "</tbody>";
+}
+
+(async () => {
+  const [manifest, status, coverage, indicators, rainYear, rainMonth] = await Promise.all([
+    get("manifest"), get("status"), get("coverage"), get("indicators"),
+    get("observations/precip_total_mm.year"), get("observations/precip_total_mm.month"),
+  ]);
+
+  // --- snapshot banner
+  if (manifest) {
+    const when = new Date(manifest.snapshot_taken_at);
+    $("snapshot").innerHTML =
+      `<strong>Snapshot.</strong> Exported ${when.toISOString().slice(0, 16).replace("T", " ")} UTC ` +
+      `and not updated since. GitHub Pages serves files, not the API, so nothing here refreshes itself.`;
+  } else {
+    $("snapshot").innerHTML = '<strong>No export found.</strong> Run <code>scripts/export_static.py</code>.';
+  }
+
+  // --- status
+  if (status) {
+    $("promise").textContent = status.promise || "";
+    table($("sources"),
+      ["Source", "Licence", "Publishes", "State", "Signal basis", "Last successful fetch"],
+      (status.sources || []).map(s => {
+        const st = String(s.freshness_status || "unknown");
+        const last = s.last_successful_update
+          ? String(s.last_successful_update).slice(0, 10)
+          : '<span class="missing">never</span>';
+        return `<tr>
+          <td>${esc(s.name || s.source_id)}</td>
+          <td>${esc(s.licence || "—")}</td>
+          <td>${esc(s.expected_frequency || "—")}</td>
+          <td><span class="pill ${esc(st)}">${esc(st)}</span></td>
+          <td>${esc(s.publication_basis || "—")}</td>
+          <td>${last}</td></tr>`;
+      }));
+  }
+
+  // --- rainfall, newest full period per county
+  const rain = (rainYear && rainYear.count) ? rainYear : rainMonth;
+  if (rain && rain.observations) {
+    const latest = new Map();
+    for (const o of rain.observations) {
+      const prev = latest.get(o.place);
+      if (!prev || o.period_start > prev.period_start) latest.set(o.place, o);
+    }
+    const rows = [...latest.values()].sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
+    const max = Math.max(...rows.map(r => r.value ?? 0), 1);
+    table($("rain"),
+      ["County", `Total (${rain.unit || "mm"})`, "", "Period", "Quality"],
+      rows.map(r => `<tr>
+        <td>${esc(r.place)}</td>
+        <td class="num">${r.value === null
+            ? `<span class="missing" title="${esc(r.missing_reason || "")}">not collected</span>`
+            : num(r.value, 1)}</td>
+        <td style="width:34%"><div class="bar" style="width:${((r.value ?? 0) / max * 100).toFixed(1)}%"></div></td>
+        <td>${esc(String(r.period_start).slice(0, 10))} → ${esc(String(r.period_end).slice(0, 10))}</td>
+        <td>${esc(r.quality || "—")}</td></tr>`));
+  }
+
+  // --- coverage, rendered from whatever columns it has
+  if (coverage && Array.isArray(coverage.coverage) && coverage.coverage.length) {
+    const cols = Object.keys(coverage.coverage[0]);
+    table($("coverage"), cols.map(c => c.replace(/_/g, " ")),
+      coverage.coverage.map(row => "<tr>" + cols.map(c => {
+        const v = row[c];
+        return typeof v === "number"
+          ? `<td class="num">${num(v, Number.isInteger(v) ? 0 : 1)}</td>`
+          : `<td>${esc(v ?? "—")}</td>`;
+      }).join("") + "</tr>"));
+  }
+
+  // --- indicators
+  if (indicators) {
+    table($("indicators"),
+      ["Code", "Name", "Unit", "Native grain", "Combines by", "Source"],
+      (indicators.indicators || []).map(i => `<tr>
+        <td><code>${esc(i.code)}</code></td>
+        <td>${esc(i.name)}</td>
+        <td>${esc(i.unit || "—")}</td>
+        <td>${esc(i.native_grain)}</td>
+        <td>${esc(i.agg_rule)}</td>
+        <td>${esc(i.source_id)}</td></tr>`));
+  }
+
+  // --- attribution, for exactly the sources that appear here
+  const credits = new Map();
+  for (const payload of [rainYear, rainMonth]) {
+    for (const a of (payload && payload.attribution) || []) credits.set(a.source_id, a);
+  }
+  if (credits.size) {
+    $("attribution").innerHTML = [...credits.values()].map(a =>
+      `<p>${esc(a.attribution_text)} — ${esc(a.licence)}` +
+      (a.licence_url ? ` (<a href="${esc(a.licence_url)}">terms</a>)` : "") + `</p>`
+    ).join("");
+  }
+})();
+</script>
+</body>
+</html>

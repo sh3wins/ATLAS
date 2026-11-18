@@ -1,0 +1,27 @@
+{
+ "count": 2,
+ "indicators": [
+  {
+   "code": "gdp_per_capita_usd",
+   "name": "GDP per capita",
+   "definition": "Gross domestic product divided by midyear population, current US dollars.",
+   "unit": "USD",
+   "agg_rule": "last",
+   "native_grain": "year",
+   "direction": "higher_better",
+   "source_id": "worldbank",
+   "source_code": "NY.GDP.PCAP.CD"
+  },
+  {
+   "code": "precip_total_mm",
+   "name": "Total precipitation",
+   "definition": "Sum of precipitation over the period, ERA5 reanalysis.",
+   "unit": "mm",
+   "agg_rule": "sum",
+   "native_grain": "day",
+   "direction": "neutral",
+   "source_id": "open-meteo",
+   "source_code": "precipitation_sum"
+  }
+ ]
+}

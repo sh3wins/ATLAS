@@ -238,22 +238,70 @@ def recompute(conn: psycopg.Connection, source_id: str | None = None) -> None:
 
 
 def status_report(conn: psycopg.Connection) -> list[dict]:
-    """What the public status endpoint serves."""
-    return db.query(
+    """What the public status endpoint serves.
+
+    The state is worked out here, not read back from dataset_freshness.
+    That column is only written when an ingest runs, so a source nobody
+    has ingested for a month keeps whatever it was last told -- and a
+    cached `current` about a pipeline that stopped in March is the exact
+    failure this module exists to prevent. Reading it live costs one
+    extra query per source and cannot go stale.
+
+    The stored value is still reported, as `stored_status` with the time
+    it was written, because a gap between the two says something worth
+    seeing: nothing has run against that source since.
+    """
+    rows = db.query(
         conn,
         """
-        SELECT s.source_id,
-               s.name,
-               s.expected_frequency,
-               s.licence,
-               f.last_attempted_update,
-               f.last_successful_update,
-               f.last_source_publication,
-               f.publication_basis,
-               f.freshness_status,
-               f.consecutive_failures,
-               f.last_error
+        SELECT s.source_id, s.name, s.expected_frequency, s.licence,
+               s.expected_lag, s.run_interval,
+               f.last_attempted_update, f.last_successful_update,
+               f.last_source_publication, f.consecutive_failures,
+               f.last_error,
+               f.freshness_status AS stored_status,
+               f.updated_at       AS stored_status_written_at
         FROM source s JOIN dataset_freshness f USING (source_id)
         ORDER BY s.source_id
         """,
     )
+
+    now = datetime.now(timezone.utc)
+    report = []
+    for row in rows:
+        declared = row["last_source_publication"]
+        if declared is not None:
+            published, basis = declared, "declared"
+        else:
+            observed = observed_publication(conn, row["source_id"])
+            published, basis = ((observed, "observed") if observed
+                                else (None, "none"))
+        report.append({
+            "source_id": row["source_id"],
+            "name": row["name"],
+            "licence": row["licence"],
+            "expected_frequency": row["expected_frequency"],
+            "freshness_status": classify(
+                expected_frequency=row["expected_frequency"],
+                last_successful=row["last_successful_update"],
+                consecutive_failures=row["consecutive_failures"],
+                last_source_publication=published,
+                expected_lag=row["expected_lag"],
+                run_interval=row["run_interval"],
+                now=now,
+            ),
+            "status_computed_at": now,
+            # What the source itself said, or null if it says nothing.
+            "declared_publication": declared,
+            # The date actually used, which may be inferred from our own
+            # holdings. publication_basis says which.
+            "publication": published,
+            "publication_basis": basis,
+            "last_attempted_update": row["last_attempted_update"],
+            "last_successful_update": row["last_successful_update"],
+            "consecutive_failures": row["consecutive_failures"],
+            "last_error": row["last_error"],
+            "stored_status": row["stored_status"],
+            "stored_status_written_at": row["stored_status_written_at"],
+        })
+    return report

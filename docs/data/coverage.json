@@ -1,0 +1,59 @@
+{
+ "coverage": [
+  {
+   "indicator": "gdp_per_capita_usd",
+   "unit": "USD",
+   "grain": "year",
+   "source_id": "worldbank",
+   "places": 1,
+   "earliest": "1960-01-01",
+   "latest": "2025-12-31",
+   "observations": 66,
+   "missing": 0
+  },
+  {
+   "indicator": "precip_total_mm",
+   "unit": "mm",
+   "grain": "day",
+   "source_id": "open-meteo",
+   "places": 47,
+   "earliest": "2024-01-01",
+   "latest": "2024-03-31",
+   "observations": 4277,
+   "missing": 0
+  },
+  {
+   "indicator": "precip_total_mm",
+   "unit": "mm",
+   "grain": "month",
+   "source_id": "open-meteo",
+   "places": 47,
+   "earliest": "2024-01-01",
+   "latest": "2024-03-31",
+   "observations": 141,
+   "missing": 0
+  },
+  {
+   "indicator": "precip_total_mm",
+   "unit": "mm",
+   "grain": "quarter",
+   "source_id": "open-meteo",
+   "places": 47,
+   "earliest": "2024-01-01",
+   "latest": "2024-03-31",
+   "observations": 47,
+   "missing": 0
+  },
+  {
+   "indicator": "precip_total_mm",
+   "unit": "mm",
+   "grain": "year",
+   "source_id": "open-meteo",
+   "places": 47,
+   "earliest": "2024-01-01",
+   "latest": "2024-03-31",
+   "observations": 47,
+   "missing": 0
+  }
+ ]
+}

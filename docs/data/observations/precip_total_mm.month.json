@@ -3,6 +3,7 @@
  "unit": "mm",
  "grain": "month",
  "count": 141,
+ "availability": "materialised",
  "observations": [
   {
    "place": "Baringo",

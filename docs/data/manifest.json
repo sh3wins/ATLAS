@@ -1,5 +1,5 @@
 {
- "snapshot_taken_at": "2026-11-18T22:02:55.140882+00:00",
+ "snapshot_taken_at": "2026-11-18T22:21:43.454856+00:00",
  "note": "A static export of the ATLAS API. Correct as of the timestamp above and not updated since. Freshness states in status.json describe the pipeline at export time.",
  "files": [
   {
@@ -25,27 +25,27 @@
   {
    "name": "observations/gdp_per_capita_usd.year",
    "path": "/observations?indicator=gdp_per_capita_usd&grain=year&limit=10000",
-   "bytes": 24188
+   "bytes": 24222
   },
   {
    "name": "observations/precip_total_mm.day",
    "path": "/observations?indicator=precip_total_mm&grain=day&limit=10000",
-   "bytes": 1493129
+   "bytes": 1493163
   },
   {
    "name": "observations/precip_total_mm.month",
    "path": "/observations?indicator=precip_total_mm&grain=month&limit=10000",
-   "bytes": 42509
+   "bytes": 42543
   },
   {
    "name": "observations/precip_total_mm.quarter",
    "path": "/observations?indicator=precip_total_mm&grain=quarter&limit=10000",
-   "bytes": 14679
+   "bytes": 14713
   },
   {
    "name": "observations/precip_total_mm.year",
    "path": "/observations?indicator=precip_total_mm&grain=year&limit=10000",
-   "bytes": 14535
+   "bytes": 14569
   }
  ]
 }

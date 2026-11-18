@@ -3,6 +3,7 @@
  "unit": "USD",
  "grain": "year",
  "count": 66,
+ "availability": "materialised",
  "observations": [
   {
    "place": "Kenya",

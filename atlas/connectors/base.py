@@ -48,6 +48,7 @@ class Connector(ABC):
     def __init__(self, storage: Storage, client: httpx.Client | None = None):
         self.storage = storage
         self._client = client
+        self._requests_made = 0
 
     # -- acquisition -----------------------------------------------------
 
@@ -81,13 +82,45 @@ class Connector(ABC):
             )
         return self._client
 
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        """Every outbound request goes through here, so they are counted.
+
+        settings.max_requests_per_run was declared with a rationale and
+        never read by anything, which made it a comment shaped like a
+        control. It matters more than it looks: area-weighting county
+        rainfall would multiply a run's request count by roughly a
+        hundred, against an endpoint whose commercial terms are not yet
+        settled. A cap that stops the run is cheaper than finding out
+        from the provider.
+        """
+        if self._requests_made >= settings.max_requests_per_run:
+            raise RequestBudgetExceeded(
+                f"{self.spec.source_id}: this run has made "
+                f"{self._requests_made} requests, which reaches "
+                f"ATLAS_MAX_REQUESTS_PER_RUN="
+                f"{settings.max_requests_per_run}. Raise it deliberately "
+                "rather than by accident."
+            )
+        self._requests_made += 1
+        return self.client.get(url, **kwargs)
+
     def _land(self, result: AcquisitionResult, payload: Any, request: dict,
-              http_status: int | None = None) -> Artifact:
-        """Write one payload to the raw store and record it on the result."""
+              http_status: int | None = None,
+              raw_bytes: bytes | None = None) -> Artifact:
+        """Write one payload to the raw store and record it on the result.
+
+        `raw_bytes` is the response exactly as it arrived. The hash is
+        taken from that, never from what we wrote: a re-serialisation
+        normalises key order and whitespace, so two different responses
+        can hash the same and an upstream revision becomes invisible.
+        The hash exists to detect that revision, so hashing our own
+        output defeats its only purpose. Where there is no response --
+        a fixture replayed offline -- the stored body is all there is.
+        """
         key, body = self.storage.put_json(self.spec.source_id, payload)
         artifact = Artifact(
             key=key,
-            content_hash=content_hash(body),
+            content_hash=content_hash(raw_bytes if raw_bytes is not None else body),
             byte_size=len(body),
             http_status=http_status,
             request=request,
@@ -95,6 +128,13 @@ class Connector(ABC):
         )
         result.add(artifact)
         return artifact
+
+
+class RequestBudgetExceeded(RuntimeError):
+    """A run hit its own ceiling on outbound requests.
+
+    Not a provider error. ATLAS stopped itself.
+    """
 
 
 class Resolver:

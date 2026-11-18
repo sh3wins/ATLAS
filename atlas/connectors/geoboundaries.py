@@ -42,7 +42,7 @@ class GeoBoundariesConnector(Connector):
         chunk = {"url": meta_url, "iso3": iso3, "level": level}
 
         try:
-            meta_response = self.client.get(meta_url)
+            meta_response = self.get(meta_url)
             meta_response.raise_for_status()
             meta = meta_response.json()
             if isinstance(meta, list):
@@ -53,7 +53,7 @@ class GeoBoundariesConnector(Connector):
                 result.fail_chunk(chunk, "metadata carried no gjDownloadURL")
                 return result
 
-            geo_response = self.client.get(download_url)
+            geo_response = self.get(download_url)
             geo_response.raise_for_status()
             geojson = geo_response.json()
         except Exception as exc:  # noqa: BLE001

@@ -151,11 +151,39 @@ def list_observations(
         params,
     )
 
+    # An empty list answers three different questions identically: the
+    # roll-up was never built, the filters match nothing, or there is no
+    # data at all. A consumer reading zero rows cannot tell "no rainfall
+    # was recorded" from "nobody has aggregated it yet", and the first
+    # reading is the dangerous one.
+    if rows:
+        availability = "materialised"
+    else:
+        # Ask about this grain alone, ignoring the place and date filters.
+        # Rows at this grain mean the roll-up exists and the filters
+        # excluded everything; no rows at this grain, with rows at the
+        # native one, means nobody has built it yet.
+        def _count(at_grain: str) -> int:
+            return db.query_one(
+                conn,
+                "SELECT count(*) AS n FROM observation "
+                "WHERE indicator_id = %s AND grain = %s",
+                (spec["indicator_id"], at_grain),
+            )["n"]
+
+        if _count(grain):
+            availability = "no_match_for_filters"
+        elif grain != spec["native_grain"] and _count(spec["native_grain"]):
+            availability = "not_materialised"
+        else:
+            availability = "no_data"
+
     return {
         "indicator": spec["code"],
         "unit": spec["unit"],
         "grain": grain,
         "count": len(rows),
+        "availability": availability,
         "observations": rows,
         "attribution": _attribution(conn, {r["source_id"] for r in rows}),
     }

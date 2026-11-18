@@ -3,6 +3,7 @@
  "unit": "mm",
  "grain": "day",
  "count": 4277,
+ "availability": "materialised",
  "observations": [
   {
    "place": "Baringo",

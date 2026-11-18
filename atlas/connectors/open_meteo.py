@@ -122,7 +122,7 @@ class OpenMeteoConnector(Connector):
                 }
 
                 try:
-                    response = self.client.get(settings.open_meteo_base,
+                    response = self.get(settings.open_meteo_base,
                                                params=params)
                     response.raise_for_status()
                     payload = response.json()
@@ -149,7 +149,8 @@ class OpenMeteoConnector(Connector):
 
                 self._land(result, {"codes": codes, "variable": variable,
                                     "timezone": zone, "locations": payload},
-                           chunk, response.status_code)
+                           chunk, response.status_code,
+                           raw_bytes=response.content)
 
         return result
 

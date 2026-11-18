@@ -35,7 +35,7 @@ observations from Open-Meteo, aggregated and served over the API.
 | Front end | Not started |
 | Deployment | Not started |
 
-62 tests pass against a real PostgreSQL 16 + PostGIS from an empty
+70 tests pass against a real PostgreSQL 16 + PostGIS from an empty
 schema, with every migration applied on each run. All three connectors
 have run against the real APIs.
 
@@ -190,7 +190,7 @@ very differently:
 ## Layout
 
 ```
-migrations/      001-008, run in order
+migrations/      001-009, run in order
 atlas/
   config.py      environment settings
   db.py          psycopg access, explicit SQL
@@ -200,7 +200,7 @@ atlas/
   pipeline/      places, standardise, aggregate, freshness
   api/main.py    FastAPI
 scripts/         load_places, ingest, demo
-tests/           62 tests; fixtures/ written from documented shapes,
+tests/           70 tests; fixtures/ written from documented shapes,
                  fixtures/live/ recorded from the real APIs
 ```
 
@@ -245,13 +245,26 @@ tests/           62 tests; fixtures/ written from documented shapes,
 - **Aggregated rows carry no provenance.** A monthly or yearly row has no
   `raw_ref` and no count of the days behind it, so a month assembled from
   nine days of data is indistinguishable from a complete one.
-- **`content_hash` hashes a re-serialisation,** not the bytes as they
-  arrived, so it cannot be used to detect that an upstream file was
-  quietly revised.
 - **A geoBoundaries re-release would duplicate every county.** `shapeID`
   is release-scoped and `place` has no unique key across releases.
 - **S3 is written but unverified** against a real bucket, as the status
   table says. Do not describe it as production storage.
+
+## Reading an empty result
+
+`/observations` never answers an empty list without saying which kind of
+empty it is, because three very different situations used to look
+identical:
+
+| `availability` | Means |
+| --- | --- |
+| `materialised` | Rows returned |
+| `not_materialised` | The grain is legal and nobody has built the roll-up yet |
+| `no_match_for_filters` | The roll-up exists; your place or date filters excluded everything |
+| `no_data` | Nothing for this indicator at all |
+
+"Nobody aggregated it yet" reading as "no rain fell" is the one that
+matters.
 
 ## Configuration
 
@@ -263,6 +276,8 @@ tests/           62 tests; fixtures/ written from documented shapes,
 | `ATLAS_LOCAL_STORAGE` | `./.atlas-raw` |
 | `ATLAS_OPEN_METEO_BASE` | the free archive endpoint |
 | `ATLAS_OPEN_METEO_KEY` | unset |
+| `ATLAS_MAX_REQUESTS_PER_RUN` | `2000`, enforced -- a run that reaches it stops |
+| `ATLAS_HTTP_TIMEOUT` | `60`; raise to `300` outside Europe/North America |
 
 ## Tests
 
@@ -274,3 +289,9 @@ python -m pytest tests/ -q                      # full suite
 
 The database fixture drops and recreates the schema each session, so the
 migrations are exercised on every run.
+
+Without `ATLAS_TEST_DATABASE_URL` the database tests **fail** rather than
+skip. They used to skip silently, which printed a green result for a run
+that exercised a third of the suite -- including in CI, where a missing
+database would have looked like success. To run the unit tests alone, say
+so explicitly with `ATLAS_ALLOW_DB_TEST_SKIP=1`.

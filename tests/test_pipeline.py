@@ -550,3 +550,54 @@ def test_status_never_reports_a_basis_its_state_contradicts(conn, loaded):
                 f"{row['freshness_status']}")
         if row["publication_basis"] == "observed":
             assert row["declared_publication"] is None
+
+
+# --- closing the small findings -----------------------------------------
+
+def test_outbound_requests_are_counted_against_a_budget(storage):
+    """F16: max_requests_per_run was declared with a rationale and never
+    read, which made it a comment shaped like a control."""
+    import httpx
+    from atlas.config import settings
+    from atlas.connectors.base import RequestBudgetExceeded
+    from atlas.connectors import OpenMeteoConnector
+
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(200, json={"daily": {"time": [],
+                                                   "precipitation_sum": []}})
+
+    connector = OpenMeteoConnector(
+        storage, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    connector._requests_made = settings.max_requests_per_run
+
+    with pytest.raises(RequestBudgetExceeded):
+        connector.get("https://example.invalid/x")
+    assert calls["n"] == 0, "the request must not leave the building"
+
+
+def test_the_hash_is_of_the_bytes_that_arrived(storage):
+    """F12: hashing our own re-serialisation normalises key order and
+    whitespace, so an upstream revision hashes identically and the hash
+    cannot do the one job it exists for."""
+    import httpx
+    from atlas.storage import content_hash
+    from atlas.connectors import WorldBankConnector
+
+    # Same data, different bytes on the wire: spacing and key order.
+    wire = b'[{"page": 1,"lastupdated":"2026-11-11"} , []]'
+
+    def handler(request):
+        return httpx.Response(200, content=wire,
+                              headers={"content-type": "application/json"})
+
+    connector = WorldBankConnector(
+        storage, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    result = connector.fetch(countries=["KEN"], indicator="NY.GDP.PCAP.CD",
+                             start_year=2023, end_year=2023)
+
+    assert result.artifacts
+    assert result.artifacts[0].content_hash == content_hash(wire), \
+        "the hash must come from the response, not from what we wrote"

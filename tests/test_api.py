@@ -120,3 +120,35 @@ def test_coverage_endpoint_shows_the_gaps(client):
                if c["indicator"] == "gdp_per_capita_usd" and c["grain"] == "year")
     assert gdp["observations"] == 10
     assert gdp["missing"] == 1
+
+
+def test_an_unbuilt_rollup_is_not_reported_as_no_rainfall(client):
+    """F15: an empty list answered three different questions identically.
+    "Nobody has aggregated it yet" read exactly like "no rain fell", and
+    only one of those is safe to act on.
+
+    The fixture rolls up to year and not to month, so month is legal,
+    empty, and buildable -- the case that used to look like zero."""
+    body = client.get("/observations",
+                      params={"indicator": "precip_total_mm",
+                              "grain": "month"}).json()
+    assert body["count"] == 0
+    assert body["availability"] == "not_materialised"
+
+
+def test_a_grain_that_exists_is_labelled_materialised(client):
+    body = client.get("/observations",
+                      params={"indicator": "precip_total_mm",
+                              "grain": "year"}).json()
+    assert body["count"] > 0
+    assert body["availability"] == "materialised"
+
+
+def test_filters_that_match_nothing_say_so(client):
+    """Uganda is in the schema and has no places loaded. That is a filter
+    miss, not an unbuilt roll-up, and not an absence of rainfall."""
+    body = client.get("/observations",
+                      params={"indicator": "precip_total_mm",
+                              "grain": "year", "country": "UGA"}).json()
+    assert body["count"] == 0
+    assert body["availability"] == "no_match_for_filters"

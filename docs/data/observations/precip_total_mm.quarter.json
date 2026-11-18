@@ -3,6 +3,7 @@
  "unit": "mm",
  "grain": "quarter",
  "count": 47,
+ "availability": "materialised",
  "observations": [
   {
    "place": "Baringo",

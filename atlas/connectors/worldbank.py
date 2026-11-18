@@ -54,7 +54,7 @@ class WorldBankConnector(Connector):
 
             chunk = {"url": url, "params": dict(params)}
             try:
-                response = self.client.get(url, params=params)
+                response = self.get(url, params=params)
                 response.raise_for_status()
                 payload = response.json()
             except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
@@ -68,7 +68,8 @@ class WorldBankConnector(Connector):
                 result.fail_chunk(chunk, f"unexpected response shape: {type(payload).__name__}")
                 break
 
-            self._land(result, payload, chunk, response.status_code)
+            self._land(result, payload, chunk, response.status_code,
+                       raw_bytes=response.content)
 
             meta = payload[0] or {}
             total_pages = int(meta.get("pages") or 1)

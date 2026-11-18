@@ -40,7 +40,17 @@ def database_url():
     unit tests still run anywhere.
     """
     if not TEST_DB:
-        pytest.skip("set ATLAS_TEST_DATABASE_URL to run database tests")
+        if os.environ.get("ATLAS_ALLOW_DB_TEST_SKIP") == "1":
+            pytest.skip("ATLAS_ALLOW_DB_TEST_SKIP=1: database tests skipped "
+                        "on purpose")
+        pytest.fail(
+            "ATLAS_TEST_DATABASE_URL is not set, so two thirds of this suite "
+            "cannot run. It used to skip silently, which printed a green "
+            "result for a run that exercised almost nothing -- including in "
+            "CI, where a missing database would have looked like success. "
+            "Set the variable, or set ATLAS_ALLOW_DB_TEST_SKIP=1 to say out "
+            "loud that you are running without a database."
+        )
 
     # Start from nothing, so the migrations are genuinely exercised on
     # every run rather than only the first.

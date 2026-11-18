@@ -3,6 +3,7 @@
  "unit": "mm",
  "grain": "year",
  "count": 47,
+ "availability": "materialised",
  "observations": [
   {
    "place": "Baringo",
